@@ -5,12 +5,8 @@ import Navbar from "./components/Navbar";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
-
-const Dashboard = () => (
-  <div style={{ color: "white", padding: "2rem" }}>
-    <h2>Dashboard (Protected)</h2>
-  </div>
-);
+import DashboardPage from "./pages/DashboardPage";
+import PlaylistPage from "./pages/PlaylistPage";
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated } = useAuth();
@@ -32,7 +28,16 @@ function App() {
             path="/dashboard"
             element={
               <ProtectedRoute>
-                <Dashboard />
+                <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/playlist"
+            element={
+              <ProtectedRoute>
+                <PlaylistPage />
               </ProtectedRoute>
             }
           />
