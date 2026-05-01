@@ -11,19 +11,20 @@ function Navbar() {
     display: "flex",
     justifyContent: "space-between",
     padding: "1rem 2rem",
-    backgroundColor: "#111",
-    borderBottom: "1px solid #222",
+    backgroundColor: "#0f1427",
+    borderBottom: "1px solid #1a1f3a",
   };
 
   const linkStyle = {
-    color: "#ccc",
+    color: "#aaa",
     marginRight: "1rem",
     textDecoration: "none",
+    transition: "color 0.2s ease",
   };
 
   return (
     <nav style={navStyle}>
-      <div style={{ color: "white" }}>MoodTunes</div>
+      <Link to="/" style={{ color: "white", textDecoration: "none" }}>MoodTunes</Link>
 
       <div>
         {isAuthenticated ? (
@@ -31,7 +32,7 @@ function Navbar() {
             <Link style={linkStyle} to="/dashboard">Dashboard</Link>
             <button
               onClick={logout}
-              style={{ background: "#222", color: "white", border: "none", padding: "0.5rem 1rem" }}
+              style={{ background: "#1a1f3a", color: "white", border: "1px solid #333", padding: "0.5rem 1rem", borderRadius: "6px", cursor: "pointer" }}
             >
               Logout
             </button>

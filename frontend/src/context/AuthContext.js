@@ -13,20 +13,32 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (data, remember) => {
-    const res = await api.post("/api/auth/login", data);
-    const jwt = res.data.token;
+    try {
+      const res = await api.post("/api/auth/login", data);
+      const jwt = res.data.token;
 
-    if (remember) {
-      localStorage.setItem("token", jwt);
-    } else {
-      sessionStorage.setItem("token", jwt);
+      if (remember) {
+        localStorage.setItem("token", jwt);
+      } else {
+        sessionStorage.setItem("token", jwt);
+      }
+
+      setToken(jwt);
+      return res.data;
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || "Login failed";
+      throw new Error(msg);
     }
-
-    setToken(jwt);
   };
 
   const register = async (data) => {
-    await api.post("/api/auth/register", data);
+    try {
+      const res = await api.post("/api/auth/register", data);
+      return res.data;
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || "Registration failed";
+      throw new Error(msg);
+    }
   };
 
   const logout = () => {

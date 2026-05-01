@@ -13,6 +13,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import java.util.regex.Pattern;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -35,6 +36,12 @@ public class AuthService {
      */
     @Transactional
     public AuthResponse register(RegisterRequest request) {
+        // Server-side password strength validation
+        Pattern passwordPattern = Pattern.compile("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[\\W_]).{8,}$");
+        if (request.getPassword() == null || !passwordPattern.matcher(request.getPassword()).matches()) {
+            throw new RuntimeException("Password must be at least 8 characters and include upper, lower, number, and special character.");
+        }
+
         // Check if username already exists
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new RuntimeException("Username already taken");
