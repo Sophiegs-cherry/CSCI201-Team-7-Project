@@ -4,8 +4,9 @@ import api from '../api/axios';
 
 const avatarColors = ['#FBBF24', '#38BDF8', '#F87171', '#818CF8', '#F472B6', '#FB923C', '#34D399'];
 
-function getInitials(displayName) {
-  return displayName.split(' ').map(w => w[0]).join('').toUpperCase();
+function getInitials(name) {
+  if (!name) return '??';
+  return name.split(' ').map(w => w[0]).join('').toUpperCase();
 }
 
 function getAvatarColor(index) {
@@ -22,58 +23,56 @@ function FriendsPage() {
   const [searchError, setSearchError] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const token = localStorage.getItem('token');
-  const headers = { Authorization: `Bearer ${token}` };
-
   useEffect(() => {
-  Promise.all([
-    api.get('/api/friends'),
-    api.get('/api/friends/requests'),
-  ])
-    .then(([friendsRes, requestsRes]) => {
-      setFriends(friendsRes.data);
-      setReceived(requestsRes.data.filter(r => r.status === 'PENDING'));
-      setSent(requestsRes.data.filter(r => r.status === 'SENT'));
-      setLoading(false);
-    })
-    .catch(() => setLoading(false));
-}, []);
+    Promise.all([
+      api.get('/api/friends'),
+      api.get('/api/friends/requests'),
+      api.get('/api/friends/requests/sent'),
+    ])
+      .then(([friendsRes, receivedRes, sentRes]) => {
+        setFriends(friendsRes.data);
+        setReceived(receivedRes.data);
+        setSent(sentRes.data);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
 
-function handleSearch() {
-  if (!searchQuery.trim()) return;
-  setSearchError('');
-  setSearchResult(null);
-  api.get(`/api/friends/search?username=${searchQuery}`)
-    .then(res => setSearchResult(res.data))
-    .catch(() => setSearchError('User not found.'));
-}
+  function handleSearch() {
+    if (!searchQuery.trim()) return;
+    setSearchError('');
+    setSearchResult(null);
+    api.get(`/api/friends/search?username=${searchQuery}`)
+      .then(res => setSearchResult(res.data))
+      .catch(() => setSearchError('User not found.'));
+  }
 
-function handleAddFriend(username) {
-  api.post('/api/friends/request', { username })
-    .then(() => {
-      setSearchResult(null);
-      setSearchQuery('');
-    });
-}
+  function handleAddFriend(userId) {
+    api.post('/api/friends/request', { targetUserId: userId })
+      .then(() => {
+        setSearchResult(null);
+        setSearchQuery('');
+      });
+  }
 
-function handleAccept(friendshipId) {
-  api.post(`/api/friends/accept/${friendshipId}`)
-    .then(() => {
-      const accepted = received.find(r => r.friendshipId === friendshipId);
-      setReceived(received.filter(r => r.friendshipId !== friendshipId));
-      if (accepted) setFriends(prev => [...prev, accepted]);
-    });
-}
+  function handleAccept(friendshipId) {
+    api.post(`/api/friends/accept/${friendshipId}`)
+      .then(() => {
+        const accepted = received.find(r => r.friendshipId === friendshipId);
+        setReceived(received.filter(r => r.friendshipId !== friendshipId));
+        if (accepted) setFriends(prev => [...prev, accepted]);
+      });
+  }
 
-function handleDecline(friendshipId) {
-  api.post(`/api/friends/decline/${friendshipId}`)
-    .then(() => setReceived(received.filter(r => r.friendshipId !== friendshipId)));
-}
+  function handleDecline(friendshipId) {
+    api.post(`/api/friends/decline/${friendshipId}`)
+      .then(() => setReceived(received.filter(r => r.friendshipId !== friendshipId)));
+  }
 
-function handleRemove(friendshipId) {
-  api.delete(`/api/friends/${friendshipId}`)
-    .then(() => setFriends(friends.filter(f => f.friendshipId !== friendshipId)));
-}
+  function handleRemove(friendshipId) {
+    api.delete(`/api/friends/${friendshipId}`)
+      .then(() => setFriends(friends.filter(f => f.friendshipId !== friendshipId)));
+  }
 
   return (
     <div className="friends-container">
@@ -94,18 +93,20 @@ function handleRemove(friendshipId) {
 
         {searchError && <p style={{ color: '#f87171', marginBottom: 12 }}>{searchError}</p>}
 
-        {searchResult && (
+        {searchResult && searchResult.length > 0 && (
           <div className="search-result">
-            <div className="friend-card">
-              <div className="friend-avatar" style={{ background: '#FBBF24' }}>
-                {getInitials(searchResult.displayName || searchResult.username)}
+            {searchResult.map((user, i) => (
+              <div className="friend-card" key={user.userId}>
+                <div className="friend-avatar" style={{ background: getAvatarColor(i) }}>
+                  {getInitials(user.displayName || user.username)}
+                </div>
+                <div className="friend-info">
+                  <span className="friend-username">{user.username}</span>
+                  <span className="friend-displayname">{user.displayName}</span>
+                </div>
+                <button className="btn-add" onClick={() => handleAddFriend(user.userId)}>Add Friend</button>
               </div>
-              <div className="friend-info">
-                <span className="friend-username">{searchResult.username}</span>
-                <span className="friend-displayname">{searchResult.displayName}</span>
-              </div>
-              <button className="btn-add" onClick={() => handleAddFriend(searchResult.username)}>Add Friend</button>
-            </div>
+            ))}
           </div>
         )}
 
@@ -130,11 +131,11 @@ function handleRemove(friendshipId) {
               {friends.map((friend, i) => (
                 <div key={friend.friendshipId} className="friend-card">
                   <div className="friend-avatar" style={{ background: getAvatarColor(i) }}>
-                    {getInitials(friend.displayName || friend.username)}
+                    {getInitials(friend.user?.displayName || friend.user?.username)}
                   </div>
                   <div className="friend-info">
-                    <span className="friend-username">{friend.username}</span>
-                    <span className="friend-displayname">{friend.displayName}</span>
+                    <span className="friend-username">{friend.user?.username}</span>
+                    <span className="friend-displayname">{friend.user?.displayName}</span>
                   </div>
                   <button className="btn-remove" onClick={() => handleRemove(friend.friendshipId)}>Remove</button>
                 </div>
@@ -148,11 +149,11 @@ function handleRemove(friendshipId) {
               {received.map((req, i) => (
                 <div key={req.friendshipId} className="friend-card">
                   <div className="friend-avatar" style={{ background: getAvatarColor(i) }}>
-                    {getInitials(req.displayName || req.username)}
+                    {getInitials(req.user?.displayName || req.user?.username)}
                   </div>
                   <div className="friend-info">
-                    <span className="friend-username">{req.username}</span>
-                    <span className="friend-displayname">{req.displayName}</span>
+                    <span className="friend-username">{req.user?.username}</span>
+                    <span className="friend-displayname">{req.user?.displayName}</span>
                   </div>
                   <div className="request-actions">
                     <button className="btn-accept" onClick={() => handleAccept(req.friendshipId)}>Accept</button>
@@ -169,11 +170,11 @@ function handleRemove(friendshipId) {
               {sent.map((req, i) => (
                 <div key={req.friendshipId} className="friend-card">
                   <div className="friend-avatar" style={{ background: getAvatarColor(i) }}>
-                    {getInitials(req.displayName || req.username)}
+                    {getInitials(req.user?.displayName || req.user?.username)}
                   </div>
                   <div className="friend-info">
-                    <span className="friend-username">{req.username}</span>
-                    <span className="friend-displayname">{req.displayName}</span>
+                    <span className="friend-username">{req.user?.username}</span>
+                    <span className="friend-displayname">{req.user?.displayName}</span>
                   </div>
                   <span className="pending-label">Pending</span>
                 </div>
