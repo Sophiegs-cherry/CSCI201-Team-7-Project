@@ -4,10 +4,6 @@ import api from '../api/axios';
 
 const avatarColors = ['#FBBF24', '#38BDF8', '#F87171', '#818CF8', '#F472B6', '#FB923C', '#34D399'];
 
-function getInitials(displayName) {
-  return displayName.split(' ').map(w => w[0]).join('').toUpperCase();
-}
-
 function getAvatarColor(index) {
   return avatarColors[index % avatarColors.length];
 }
