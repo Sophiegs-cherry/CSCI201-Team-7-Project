@@ -2,10 +2,16 @@ package com.moodtunes.controller;
 
 import com.moodtunes.model.*;
 import com.moodtunes.repository.*;
+import com.moodtunes.service.FlaskClientService.FlaskUnavailableException;
+import com.moodtunes.service.PlaylistGenerationService;
+import com.moodtunes.service.PlaylistGenerationService.GenerationResult;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.HttpClientErrorException;
 
 import java.security.Principal;
 import java.util.*;
@@ -17,6 +23,11 @@ import java.util.*;
 @RestController
 @RequestMapping("/api/playlists")
 public class PlaylistController {
+
+    private static final Logger logger = LoggerFactory.getLogger(PlaylistController.class);
+
+    @Autowired
+    private PlaylistGenerationService playlistGenerationService;
 
     @Autowired
     private PlaylistRepository playlistRepository;
@@ -32,6 +43,56 @@ public class PlaylistController {
 
     @Autowired
     private SharedPlaylistRepository sharedPlaylistRepository;
+
+    public static class GenerateRequest {
+        private String mood;
+        private String musicPreferences;
+        private String context;
+
+        public String getMood() { return mood; }
+        public void setMood(String mood) { this.mood = mood; }
+
+        public String getMusicPreferences() { return musicPreferences; }
+        public void setMusicPreferences(String musicPreferences) { this.musicPreferences = musicPreferences; }
+
+        public String getContext() { return context; }
+        public void setContext(String context) { this.context = context; }
+    }
+
+    // ── POST /api/playlists/generate ─────────────────────────────────────────
+    @PostMapping("/generate")
+    public ResponseEntity<?> generate(@RequestBody GenerateRequest body, Principal principal) {
+        if (body == null || body.getMood() == null || body.getMood().isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "mood is required"));
+        }
+        if (principal == null || principal.getName() == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Not authenticated"));
+        }
+
+        String username = principal.getName();
+        try {
+            GenerationResult result = playlistGenerationService.generate(
+                    username,
+                    body.getMood().trim(),
+                    body.getMusicPreferences(),
+                    body.getContext()
+            );
+            return ResponseEntity.ok(result);
+        } catch (FlaskUnavailableException ex) {
+            logger.warn("Flask unavailable for user '{}': {}", username, ex.getMessage());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(Map.of("error", "Playlist service is temporarily unavailable. Please try again."));
+        } catch (HttpClientErrorException ex) {
+            logger.warn("Flask rejected request for user '{}': {} {}",
+                    username, ex.getStatusCode(), ex.getResponseBodyAsString());
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Invalid request: " + ex.getStatusCode().value()));
+        } catch (Exception ex) {
+            logger.error("Unexpected error generating playlist for user '{}'", username, ex);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Internal error generating playlist"));
+        }
+    }
 
     // ── POST /api/playlists/save ──────────────────────────────────────────────
     // Request: { title, moodId, tracks: [{trackName, artistName, youtubeMusicUrl, trackOrder}] }
