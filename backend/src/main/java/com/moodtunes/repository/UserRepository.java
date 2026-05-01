@@ -27,6 +27,8 @@ public interface UserRepository extends JpaRepository<User, Integer> {
      */
     Optional<User> findByEmail(String email);
 
+    java.util.List<User> findByUsernameContainingIgnoreCase(String username);
+
     /**
      * Check if a username already exists in the database.
      * Used during registration validation.

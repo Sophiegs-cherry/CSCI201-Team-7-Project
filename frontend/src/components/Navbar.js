@@ -30,6 +30,9 @@ function Navbar() {
         {isAuthenticated ? (
           <>
             <Link style={linkStyle} to="/dashboard">Dashboard</Link>
+            <Link style={linkStyle} to="/library">Library</Link>
+            <Link style={linkStyle} to="/friends">Friends</Link>
+            <Link style={linkStyle} to="/shared">Shared</Link>
             <button
               onClick={logout}
               style={{ background: "#1a1f3a", color: "white", border: "1px solid #333", padding: "0.5rem 1rem", borderRadius: "6px", cursor: "pointer" }}

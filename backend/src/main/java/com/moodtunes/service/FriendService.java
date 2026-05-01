@@ -2,13 +2,14 @@ package com.moodtunes.service;
 
 import com.moodtunes.dto.FriendshipView;
 import com.moodtunes.dto.UserSummary;
-import com.moodtunes.exception.ApiExceptions;
 import com.moodtunes.model.Friendship;
 import com.moodtunes.model.User;
 import com.moodtunes.repository.FriendshipRepository;
 import com.moodtunes.repository.UserRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,17 +27,18 @@ public class FriendService {
     }
 
     @Transactional
-    public FriendshipView sendRequest(Integer requesterId, Integer targetUserId) {
+    public FriendshipView sendRequest(String requesterUsername, Integer targetUserId) {
+        Integer requesterId = requireUser(requesterUsername).getUserId();
         if (requesterId.equals(targetUserId)) {
-            throw new ApiExceptions.BadRequest("You cannot friend yourself");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "You cannot friend yourself");
         }
         User requester = users.findById(requesterId)
-                .orElseThrow(() -> new ApiExceptions.NotFound("Requester not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Requester not found"));
         User target = users.findById(targetUserId)
-                .orElseThrow(() -> new ApiExceptions.NotFound("Target user not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Target user not found"));
 
         friendships.findBetween(requesterId, targetUserId).ifPresent(f -> {
-            throw new ApiExceptions.Conflict("A friendship record already exists with this user");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "A friendship record already exists with this user");
         });
 
         Friendship f = new Friendship();
@@ -53,7 +55,8 @@ public class FriendService {
     }
 
     @Transactional(readOnly = true)
-    public List<FriendshipView> incomingRequests(Integer userId) {
+    public List<FriendshipView> incomingRequests(String username) {
+        Integer userId = requireUser(username).getUserId();
         return friendships.findByAddresseeUserIdAndStatus(userId, Friendship.Status.PENDING)
                 .stream()
                 .map(f -> new FriendshipView(
@@ -65,7 +68,8 @@ public class FriendService {
     }
 
     @Transactional(readOnly = true)
-    public List<FriendshipView> outgoingRequests(Integer userId) {
+    public List<FriendshipView> outgoingRequests(String username) {
+        Integer userId = requireUser(username).getUserId();
         return friendships.findByRequesterUserIdAndStatus(userId, Friendship.Status.PENDING)
                 .stream()
                 .map(f -> new FriendshipView(
@@ -77,30 +81,33 @@ public class FriendService {
     }
 
     @Transactional
-    public void accept(Integer userId, Integer friendshipId) {
+    public void accept(String username, Integer friendshipId) {
+        Integer userId = requireUser(username).getUserId();
         Friendship f = friendships.findById(friendshipId)
-                .orElseThrow(() -> new ApiExceptions.NotFound("Request not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found"));
         if (!f.getAddressee().getUserId().equals(userId)) {
-            throw new ApiExceptions.Forbidden("Not your request to accept");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your request to accept");
         }
         if (f.getStatus() != Friendship.Status.PENDING) {
-            throw new ApiExceptions.BadRequest("Request already resolved");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Request already resolved");
         }
         f.setStatus(Friendship.Status.ACCEPTED);
     }
 
     @Transactional
-    public void decline(Integer userId, Integer friendshipId) {
+    public void decline(String username, Integer friendshipId) {
+        Integer userId = requireUser(username).getUserId();
         Friendship f = friendships.findById(friendshipId)
-                .orElseThrow(() -> new ApiExceptions.NotFound("Request not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Request not found"));
         if (!f.getAddressee().getUserId().equals(userId)) {
-            throw new ApiExceptions.Forbidden("Not your request to decline");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your request to decline");
         }
         f.setStatus(Friendship.Status.DECLINED);
     }
 
     @Transactional(readOnly = true)
-    public List<FriendshipView> listFriends(Integer userId) {
+    public List<FriendshipView> listFriends(String username) {
+        Integer userId = requireUser(username).getUserId();
         List<Friendship> all = friendships.findAcceptedFriendshipsForUser(userId);
         List<FriendshipView> out = new ArrayList<>(all.size());
         for (Friendship f : all) {
@@ -115,17 +122,19 @@ public class FriendService {
     }
 
     @Transactional
-    public void remove(Integer userId, Integer friendshipId) {
+    public void remove(String username, Integer friendshipId) {
+        Integer userId = requireUser(username).getUserId();
         Friendship f = friendships.findById(friendshipId)
-                .orElseThrow(() -> new ApiExceptions.NotFound("Friendship not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Friendship not found"));
         if (!f.getRequester().getUserId().equals(userId) && !f.getAddressee().getUserId().equals(userId)) {
-            throw new ApiExceptions.Forbidden("Not your friendship to remove");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Not your friendship to remove");
         }
         friendships.delete(f);
     }
 
     @Transactional(readOnly = true)
-    public List<UserSummary> search(Integer requesterId, String query) {
+    public List<UserSummary> search(String username, String query) {
+        Integer requesterId = requireUser(username).getUserId();
         if (query == null || query.isBlank()) return List.of();
         return users.findByUsernameContainingIgnoreCase(query.trim())
                 .stream()
@@ -136,5 +145,10 @@ public class FriendService {
 
     private UserSummary summary(User u) {
         return new UserSummary(u.getUserId(), u.getUsername(), u.getDisplayName(), u.getProfilePicturePath());
+    }
+
+    private User requireUser(String username) {
+        return users.findByUsername(username)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
     }
 }

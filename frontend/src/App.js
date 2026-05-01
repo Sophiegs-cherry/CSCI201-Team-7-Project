@@ -7,6 +7,10 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import DashboardPage from "./pages/DashboardPage";
 import PlaylistPage from "./pages/PlaylistPage";
+import LibraryPage from "./pages/LibraryPage";
+import PlaylistDetailPage from "./pages/PlaylistDetailPage";
+import FriendsPage from "./pages/FriendsPage";
+import SharedWithMePage from "./pages/SharedWithMePage";
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated } = useAuth();
@@ -38,6 +42,42 @@ function App() {
             element={
               <ProtectedRoute>
                 <PlaylistPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/library"
+            element={
+              <ProtectedRoute>
+                <LibraryPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/playlist/:id"
+            element={
+              <ProtectedRoute>
+                <PlaylistDetailPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/friends"
+            element={
+              <ProtectedRoute>
+                <FriendsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/shared"
+            element={
+              <ProtectedRoute>
+                <SharedWithMePage />
               </ProtectedRoute>
             }
           />
