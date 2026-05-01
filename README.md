@@ -19,7 +19,8 @@ React :3000  →  Spring Boot :8080  →  Flask :5001  →  Gemini AI + YouTube 
 ```bash
 # 1. MySQL
 mysql -u root -p -e "CREATE DATABASE moodtunes;"
-# Update backend/src/main/resources/application.properties with your credentials
+cp backend/src/main/resources/application.properties.example backend/src/main/resources/application.properties
+# Update backend/src/main/resources/application.properties with your local MySQL credentials
 
 # 2. Flask
 cd flask-service && pip install -r requirements.txt
