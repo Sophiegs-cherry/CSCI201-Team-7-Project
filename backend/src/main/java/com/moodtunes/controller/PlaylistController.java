@@ -171,7 +171,7 @@ public class PlaylistController {
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         List<SharedPlaylist> sharedPlaylists =
-                sharedPlaylistRepository.findByRecipientIdOrderBySharedAtDesc(user.getUserId());
+                sharedPlaylistRepository.findByRecipientUserIdOrderBySharedAtDesc(user.getUserId());
 
         List<Map<String, Object>> response = new ArrayList<>();
         for (SharedPlaylist sp : sharedPlaylists) {
