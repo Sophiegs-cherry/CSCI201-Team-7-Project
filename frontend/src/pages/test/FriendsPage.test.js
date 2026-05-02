@@ -1,9 +1,9 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import FriendsPage from './FriendsPage';
-import api from '../api/axios';
+import FriendsPage from '../FriendsPage';
+import api from '../../api/axios';
 
 // 1. Mock the API
-jest.mock('../api/axios');
+jest.mock('../../api/axios');
 
 const mockFriendsData = [
   { friendshipId: 101, user: { username: 'jdoe', displayName: 'John Doe' } }

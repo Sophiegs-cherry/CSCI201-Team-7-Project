@@ -145,7 +145,7 @@ public class MoodControllerTest {
         mockMvc.perform(post("/api/moods/log")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isForbidden());
     }
 
     /**

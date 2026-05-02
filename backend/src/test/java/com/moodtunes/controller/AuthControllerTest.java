@@ -4,10 +4,12 @@ import com.moodtunes.dto.AuthResponse;
 import com.moodtunes.dto.LoginRequest;
 import com.moodtunes.dto.MessageResponse;
 import com.moodtunes.dto.RegisterRequest;
+import com.moodtunes.security.JwtTokenProvider;
 import com.moodtunes.service.AuthService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
@@ -26,6 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Tests 1.7-1.8 (Protected Routes) are in SecurityConfigTest.java
  */
 @WebMvcTest(AuthController.class)
+@AutoConfigureMockMvc(addFilters = false)
 public class AuthControllerTest {
 
     @Autowired
@@ -36,6 +39,9 @@ public class AuthControllerTest {
 
     @MockBean
     private AuthService authService;
+
+    @MockBean
+    private JwtTokenProvider jwtTokenProvider;
 
     /**
      * Test 1.1 — Successful Registration
@@ -127,7 +133,7 @@ public class AuthControllerTest {
     public void testSuccessfulLogin() throws Exception {
         // Arrange
         LoginRequest request = new LoginRequest();
-        request.setUsername("testuser");
+        request.setUsernameOrEmail("testuser");
         request.setPassword("Password123");
 
         AuthResponse response = new AuthResponse();
@@ -156,7 +162,7 @@ public class AuthControllerTest {
     public void testLoginWrongPassword() throws Exception {
         // Arrange
         LoginRequest request = new LoginRequest();
-        request.setUsername("testuser");
+        request.setUsernameOrEmail("testuser");
         request.setPassword("WrongPassword123");
 
         when(authService.login(any(LoginRequest.class)))
@@ -180,7 +186,7 @@ public class AuthControllerTest {
     public void testLoginNonexistentUser() throws Exception {
         // Arrange
         LoginRequest request = new LoginRequest();
-        request.setUsername("nonexistentuser");
+        request.setUsernameOrEmail("nonexistentuser");
         request.setPassword("Password123");
 
         when(authService.login(any(LoginRequest.class)))

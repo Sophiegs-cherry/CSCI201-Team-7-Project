@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import RegisterPage from './RegisterPage';
+import RegisterPage from '../RegisterPage';
 
 jest.mock('react-router-dom', () => ({
   ...jest.requireActual('react-router-dom'),
@@ -7,7 +7,7 @@ jest.mock('react-router-dom', () => ({
 }));
 
 const mockRegister = jest.fn();
-jest.mock('../context/AuthContext', () => ({
+jest.mock('../../context/AuthContext', () => ({
   useAuth: () => ({
     register: mockRegister,
   }),

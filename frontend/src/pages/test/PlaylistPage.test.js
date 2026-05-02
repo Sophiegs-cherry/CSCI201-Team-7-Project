@@ -1,10 +1,10 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import PlaylistPage from './PlaylistPage';
-import api from '../api/axios';
+import PlaylistPage from '../PlaylistPage';
+import api from '../../api/axios';
 
 // 1. Mock the API
-jest.mock('../api/axios');
+jest.mock('../../api/axios');
 
 const mockGeneratedPlaylist = {
   title: 'Rainy Day Jazz',

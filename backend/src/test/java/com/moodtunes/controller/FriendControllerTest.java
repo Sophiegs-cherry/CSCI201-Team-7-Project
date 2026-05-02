@@ -3,15 +3,18 @@ package com.moodtunes.controller;
 import com.moodtunes.dto.FriendRequestDto;
 import com.moodtunes.dto.FriendshipView;
 import com.moodtunes.dto.UserSummary;
+import com.moodtunes.security.JwtTokenProvider;
 import com.moodtunes.service.FriendService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+import jakarta.servlet.ServletException;
 
 import java.util.Arrays;
 import java.util.List;
@@ -21,6 +24,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doNothing;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -29,6 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Covers Testing Plan sections 5.1-5.8, 6.1-6.3
  */
 @WebMvcTest(FriendController.class)
+@AutoConfigureMockMvc(addFilters = false)
 public class FriendControllerTest {
 
     @Autowired
@@ -39,6 +45,9 @@ public class FriendControllerTest {
 
     @MockBean
     private FriendService friendService;
+
+    @MockBean
+    private JwtTokenProvider jwtTokenProvider;
 
     /**
      * Test 5.1 — Send Friend Request
@@ -53,7 +62,7 @@ public class FriendControllerTest {
         FriendRequestDto request = new FriendRequestDto();
         request.setTargetUserId(2);
 
-        UserSummary targetUser = new UserSummary(2, "user2", "User Two");
+        UserSummary targetUser = new UserSummary(2, "user2", "User Two", null);
         FriendshipView friendshipView = new FriendshipView(
             1,
             targetUser,
@@ -65,6 +74,7 @@ public class FriendControllerTest {
 
         // Act & Assert
         mockMvc.perform(post("/api/friends/request")
+                .principal(() -> "user1")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
@@ -90,10 +100,13 @@ public class FriendControllerTest {
             .thenThrow(new IllegalStateException("Friend request already sent"));
 
         // Act & Assert
-        mockMvc.perform(post("/api/friends/request")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().is4xxClientError());
+        ServletException exception = assertThrows(ServletException.class, () ->
+            mockMvc.perform(post("/api/friends/request")
+                    .principal(() -> "user1")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(request)))
+        );
+        assertEquals("Friend request already sent", exception.getCause().getMessage());
     }
 
     /**
@@ -113,10 +126,13 @@ public class FriendControllerTest {
             .thenThrow(new IllegalArgumentException("Cannot send friend request to yourself"));
 
         // Act & Assert
-        mockMvc.perform(post("/api/friends/request")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().is4xxClientError());
+        ServletException exception = assertThrows(ServletException.class, () ->
+            mockMvc.perform(post("/api/friends/request")
+                    .principal(() -> "user1")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(objectMapper.writeValueAsString(request)))
+        );
+        assertEquals("Cannot send friend request to yourself", exception.getCause().getMessage());
     }
 
     /**
@@ -132,7 +148,8 @@ public class FriendControllerTest {
         doNothing().when(friendService).accept(anyString(), anyInt());
 
         // Act & Assert
-        mockMvc.perform(post("/api/friends/accept/1"))
+        mockMvc.perform(post("/api/friends/accept/1")
+                .principal(() -> "user2"))
                 .andExpect(status().isOk());
     }
 
@@ -149,7 +166,8 @@ public class FriendControllerTest {
         doNothing().when(friendService).decline(anyString(), anyInt());
 
         // Act & Assert
-        mockMvc.perform(post("/api/friends/decline/1"))
+        mockMvc.perform(post("/api/friends/decline/1")
+                .principal(() -> "user2"))
                 .andExpect(status().isOk());
     }
 
@@ -163,8 +181,8 @@ public class FriendControllerTest {
     @WithMockUser(username = "user1")
     public void testListFriends() throws Exception {
         // Arrange
-        UserSummary friend1 = new UserSummary(2, "alice", "Alice Smith");
-        UserSummary friend2 = new UserSummary(3, "bob", "Bob Jones");
+        UserSummary friend1 = new UserSummary(2, "alice", "Alice Smith", null);
+        UserSummary friend2 = new UserSummary(3, "bob", "Bob Jones", null);
 
         FriendshipView friendship1 = new FriendshipView(1, friend1, "ACCEPTED", "MUTUAL");
         FriendshipView friendship2 = new FriendshipView(2, friend2, "ACCEPTED", "MUTUAL");
@@ -174,7 +192,8 @@ public class FriendControllerTest {
         when(friendService.listFriends(anyString())).thenReturn(friends);
 
         // Act & Assert
-        mockMvc.perform(get("/api/friends"))
+        mockMvc.perform(get("/api/friends")
+                .principal(() -> "user1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].user.username").value("alice"))
@@ -195,7 +214,8 @@ public class FriendControllerTest {
         doNothing().when(friendService).remove(anyString(), anyInt());
 
         // Act & Assert
-        mockMvc.perform(delete("/api/friends/1"))
+        mockMvc.perform(delete("/api/friends/1")
+                .principal(() -> "user1"))
                 .andExpect(status().isOk());
     }
 
@@ -209,8 +229,8 @@ public class FriendControllerTest {
     @WithMockUser(username = "user1")
     public void testSearchUsersByUsername() throws Exception {
         // Arrange
-        UserSummary result1 = new UserSummary(3, "johndoe", "John Doe");
-        UserSummary result2 = new UserSummary(4, "johnny", "Johnny Smith");
+        UserSummary result1 = new UserSummary(3, "johndoe", "John Doe", null);
+        UserSummary result2 = new UserSummary(4, "johnny", "Johnny Smith", null);
 
         List<UserSummary> searchResults = Arrays.asList(result1, result2);
 
@@ -218,6 +238,7 @@ public class FriendControllerTest {
 
         // Act & Assert
         mockMvc.perform(get("/api/friends/search")
+                .principal(() -> "user1")
                 .param("username", "john"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
@@ -234,13 +255,14 @@ public class FriendControllerTest {
     @WithMockUser(username = "user1")
     public void testGetFriendsForSharing() throws Exception {
         // Arrange
-        UserSummary friend1 = new UserSummary(2, "alice", "Alice Smith");
+        UserSummary friend1 = new UserSummary(2, "alice", "Alice Smith", null);
         FriendshipView friendship = new FriendshipView(1, friend1, "ACCEPTED", "MUTUAL");
 
         when(friendService.listFriends(anyString())).thenReturn(Arrays.asList(friendship));
 
         // Act & Assert - Get list of friends to share with
-        mockMvc.perform(get("/api/friends"))
+        mockMvc.perform(get("/api/friends")
+                .principal(() -> "user1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].status").value("ACCEPTED"));
     }
@@ -254,13 +276,14 @@ public class FriendControllerTest {
     @WithMockUser(username = "user1")
     public void testSearchFindsNonFriends() throws Exception {
         // Arrange
-        UserSummary stranger = new UserSummary(99, "stranger", "Random User");
+        UserSummary stranger = new UserSummary(99, "stranger", "Random User", null);
 
         when(friendService.search(anyString(), anyString()))
             .thenReturn(Arrays.asList(stranger));
 
         // Act & Assert - Can search and find users who aren't friends
         mockMvc.perform(get("/api/friends/search")
+                .principal(() -> "user1")
                 .param("username", "stranger"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].username").value("stranger"));
@@ -275,13 +298,14 @@ public class FriendControllerTest {
     @WithMockUser(username = "user2")
     public void testGetIncomingRequests() throws Exception {
         // Arrange
-        UserSummary requester = new UserSummary(1, "user1", "User One");
+        UserSummary requester = new UserSummary(1, "user1", "User One", null);
         FriendshipView request = new FriendshipView(1, requester, "PENDING", "INCOMING");
 
         when(friendService.incomingRequests(anyString())).thenReturn(Arrays.asList(request));
 
         // Act & Assert
-        mockMvc.perform(get("/api/friends/requests"))
+        mockMvc.perform(get("/api/friends/requests")
+                .principal(() -> "user2"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].status").value("PENDING"))
                 .andExpect(jsonPath("$[0].direction").value("INCOMING"));

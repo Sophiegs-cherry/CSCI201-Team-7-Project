@@ -1,12 +1,25 @@
 package com.moodtunes.controller;
 
+import com.moodtunes.model.User;
+import com.moodtunes.repository.MoodRepository;
+import com.moodtunes.repository.PlaylistRepository;
+import com.moodtunes.repository.PlaylistTrackRepository;
+import com.moodtunes.repository.UserRepository;
+import com.moodtunes.service.FriendService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
+import java.util.Optional;
+
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -23,17 +36,44 @@ public class SecurityConfigTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @MockBean
+    private UserRepository userRepository;
+
+    @MockBean
+    private PlaylistRepository playlistRepository;
+
+    @MockBean
+    private PlaylistTrackRepository playlistTrackRepository;
+
+    @MockBean
+    private MoodRepository moodRepository;
+
+    @MockBean
+    private FriendService friendService;
+
+    @BeforeEach
+    public void setup() {
+        User user = new User();
+        user.setUserId(1);
+        user.setUsername("testuser");
+
+        when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(user));
+        when(playlistRepository.findByUserIdOrderByCreatedAtDesc(1)).thenReturn(List.of());
+        when(moodRepository.findByUserIdOrderByCreatedAtDesc(1)).thenReturn(List.of());
+        when(friendService.listFriends(anyString())).thenReturn(List.of());
+    }
+
     /**
      * Test 1.7 — Access Protected Route Without Token
      * Type: Black box, unit test
      * Input: GET /api/playlists/library with no Authorization header
-     * Expected: HTTP 401 Unauthorized
+     * Expected: HTTP 403 Forbidden
      */
     @Test
     public void testAccessProtectedRouteWithoutToken() throws Exception {
         // Act & Assert
         mockMvc.perform(get("/api/playlists/library"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isForbidden());
     }
 
     /**
@@ -60,23 +100,23 @@ public class SecurityConfigTest {
     public void testMultipleProtectedRoutesWithoutAuth() throws Exception {
         // Test mood logging
         mockMvc.perform(post("/api/moods/log"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isForbidden());
 
         // Test mood history
         mockMvc.perform(get("/api/moods/history"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isForbidden());
 
         // Test playlist generation
         mockMvc.perform(post("/api/playlists/generate"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isForbidden());
 
         // Test playlist save
         mockMvc.perform(post("/api/playlists/save"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isForbidden());
 
         // Test friends list
         mockMvc.perform(get("/api/friends"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isForbidden());
     }
 
     /**

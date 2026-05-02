@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
-import LoginPage from './LoginPage';
-import { useAuth } from '../context/AuthContext';
+import LoginPage from '../LoginPage';
+import { useAuth } from '../../context/AuthContext';
 
 // 1. Mock the hooks
 const mockedNavigate = jest.fn();
@@ -10,7 +10,7 @@ jest.mock('react-router-dom', () => ({
   useNavigate: () => mockedNavigate,
 }));
 
-jest.mock('../context/AuthContext', () => ({
+jest.mock('../../context/AuthContext', () => ({
   useAuth: jest.fn(),
 }));
 

@@ -4,6 +4,7 @@ import com.moodtunes.model.*;
 import com.moodtunes.repository.*;
 import com.moodtunes.service.PlaylistGenerationService;
 import com.moodtunes.service.PlaylistGenerationService.GenerationResult;
+import com.moodtunes.service.FlaskClientService.TrackDto;
 import com.moodtunes.service.FlaskClientService.FlaskUnavailableException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,14 +23,17 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
  * PlaylistController Unit Tests
- * Covers Testing Plan sections 3.1-3.3, 4.1-4.5
+ * Covers Testing Plan sections 3.1-3.3, 4.1-4.5, 6.1-6.3
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -55,6 +59,12 @@ public class PlaylistControllerTest {
 
     @MockBean
     private UserRepository userRepository;
+
+    @MockBean
+    private SharedPlaylistRepository sharedPlaylistRepository;
+
+    @MockBean
+    private FriendshipRepository friendshipRepository;
 
     private User mockUser;
     private Mood mockMood;
@@ -90,17 +100,20 @@ public class PlaylistControllerTest {
         request.put("mood", "happy and energetic");
 
         // Create mock GenerationResult with tracks
-        GenerationResult mockResult = new GenerationResult();
-        List<Map<String, Object>> tracks = new ArrayList<>();
+        List<TrackDto> tracks = new ArrayList<>();
         for (int i = 1; i <= 18; i++) {
-            Map<String, Object> track = new HashMap<>();
-            track.put("trackName", "Track " + i);
-            track.put("artistName", "Artist " + i);
-            track.put("youtubeMusicUrl", "https://music.youtube.com/watch?v=track" + i);
-            track.put("trackOrder", i);
-            tracks.add(track);
+            tracks.add(new TrackDto(
+                    "Track " + i,
+                    "Artist " + i,
+                    "https://music.youtube.com/watch?v=track" + i));
         }
-        mockResult.setTracks(tracks);
+        GenerationResult mockResult = new GenerationResult(
+                "Mood: happy and energetic",
+                "happy and energetic",
+                null,
+                null,
+                LocalDateTime.now(),
+                tracks);
 
         when(playlistGenerationService.generate(anyString(), anyString(), any(), any()))
             .thenReturn(mockResult);
@@ -130,8 +143,13 @@ public class PlaylistControllerTest {
         Map<String, String> request = new HashMap<>();
         request.put("mood", "happy");
 
-        GenerationResult mockResult = new GenerationResult();
-        mockResult.setTracks(new ArrayList<>());
+        GenerationResult mockResult = new GenerationResult(
+                "Mood: happy",
+                "happy",
+                null,
+                null,
+                LocalDateTime.now(),
+                new ArrayList<>());
 
         when(playlistGenerationService.generate(anyString(), anyString(), any(), any()))
             .thenReturn(mockResult);
@@ -244,7 +262,7 @@ public class PlaylistControllerTest {
 
         when(playlistRepository.findByUserIdOrderByCreatedAtDesc(1))
             .thenReturn(playlists);
-        when(playlistTrackRepository.findByPlaylistId(any())).thenReturn(new ArrayList<>());
+        when(playlistTrackRepository.findByPlaylistId(anyInt())).thenReturn(new ArrayList<>());
 
         // Act & Assert
         mockMvc.perform(get("/api/playlists/library"))
@@ -328,7 +346,7 @@ public class PlaylistControllerTest {
      * Test 4.5 — Get Nonexistent Playlist
      * Type: Black box, unit test
      * Input: GET /api/playlists/99999
-     * Expected: HTTP 403 (your controller returns 403, not 404)
+     * Expected: HTTP 404 Not Found
      */
     @Test
     @WithMockUser(username = "testuser")
@@ -338,7 +356,145 @@ public class PlaylistControllerTest {
 
         // Act & Assert
         mockMvc.perform(get("/api/playlists/99999"))
-                .andExpect(status().isForbidden())
+                .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").exists());
+    }
+
+    /**
+     * Test 6.1 — Share Playlist with Friends
+     * Type: Black box, unit test
+     * Input: POST /api/playlists/share with playlistId, recipientIds, message
+     * Expected: HTTP 200, shared playlist records created
+     */
+    @Test
+    @WithMockUser(username = "testuser")
+    public void testSharePlaylistWithFriends() throws Exception {
+        // Arrange
+        User friend1 = new User();
+        friend1.setUserId(2);
+        friend1.setUsername("friend1");
+
+        User friend2 = new User();
+        friend2.setUserId(3);
+        friend2.setUsername("friend2");
+
+        Playlist playlist = new Playlist();
+        playlist.setPlaylistId(1);
+        playlist.setUser(mockUser);
+        playlist.setTitle("Happy Playlist");
+
+        Friendship acceptedFriendship = new Friendship();
+        acceptedFriendship.setStatus(Friendship.Status.ACCEPTED);
+
+        when(playlistRepository.findById(1)).thenReturn(Optional.of(playlist));
+        when(userRepository.findById(2)).thenReturn(Optional.of(friend1));
+        when(userRepository.findById(3)).thenReturn(Optional.of(friend2));
+        when(friendshipRepository.findBetween(1, 2)).thenReturn(Optional.of(acceptedFriendship));
+        when(friendshipRepository.findBetween(1, 3)).thenReturn(Optional.of(acceptedFriendship));
+
+        Map<String, Object> request = new HashMap<>();
+        request.put("playlistId", 1);
+        request.put("recipientIds", Arrays.asList(2, 3));
+        request.put("message", "Check this out!");
+
+        // Act & Assert
+        mockMvc.perform(post("/api/playlists/share")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Playlist shared successfully"));
+
+        verify(sharedPlaylistRepository, times(2)).save(any(SharedPlaylist.class));
+    }
+
+    /**
+     * Test 6.2 — Share Playlist with Non-Friend
+     * Type: Black box, unit test
+     * Input: POST /api/playlists/share with a recipient who is not an accepted friend
+     * Expected: HTTP 400 Bad Request
+     */
+    @Test
+    @WithMockUser(username = "testuser")
+    public void testSharePlaylistWithNonFriend() throws Exception {
+        // Arrange
+        User nonFriend = new User();
+        nonFriend.setUserId(99);
+        nonFriend.setUsername("stranger");
+
+        Playlist playlist = new Playlist();
+        playlist.setPlaylistId(1);
+        playlist.setUser(mockUser);
+        playlist.setTitle("Happy Playlist");
+
+        when(playlistRepository.findById(1)).thenReturn(Optional.of(playlist));
+        when(userRepository.findById(99)).thenReturn(Optional.of(nonFriend));
+        when(friendshipRepository.findBetween(1, 99)).thenReturn(Optional.empty());
+
+        Map<String, Object> request = new HashMap<>();
+        request.put("playlistId", 1);
+        request.put("recipientIds", Collections.singletonList(99));
+        request.put("message", "Check this out!");
+
+        // Act & Assert
+        mockMvc.perform(post("/api/playlists/share")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Can only share with friends"));
+
+        verify(sharedPlaylistRepository, times(0)).save(any(SharedPlaylist.class));
+    }
+
+    /**
+     * Test 6.3 — View Shared Playlists
+     * Type: Black box, unit test
+     * Input: GET /api/playlists/shared
+     * Expected: HTTP 200, list of playlists shared with the authenticated user
+     */
+    @Test
+    @WithMockUser(username = "testuser")
+    public void testViewSharedPlaylists() throws Exception {
+        // Arrange
+        User sender = new User();
+        sender.setUserId(2);
+        sender.setUsername("musicfriend");
+
+        Playlist playlist1 = new Playlist();
+        playlist1.setPlaylistId(10);
+        playlist1.setTitle("Calm Study Mix");
+
+        Playlist playlist2 = new Playlist();
+        playlist2.setPlaylistId(11);
+        playlist2.setTitle("Workout Mix");
+
+        SharedPlaylist share1 = new SharedPlaylist();
+        share1.setShareId(100);
+        share1.setPlaylist(playlist1);
+        share1.setSender(sender);
+        share1.setRecipient(mockUser);
+        share1.setMessage("For studying");
+        share1.setSharedAt(LocalDateTime.now());
+
+        SharedPlaylist share2 = new SharedPlaylist();
+        share2.setShareId(101);
+        share2.setPlaylist(playlist2);
+        share2.setSender(sender);
+        share2.setRecipient(mockUser);
+        share2.setMessage("For gym");
+        share2.setSharedAt(LocalDateTime.now().minusHours(1));
+
+        when(sharedPlaylistRepository.findByRecipientUserIdOrderBySharedAtDesc(1))
+                .thenReturn(Arrays.asList(share1, share2));
+
+        // Act & Assert
+        mockMvc.perform(get("/api/playlists/shared"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].shareId").value(100))
+                .andExpect(jsonPath("$[0].playlistId").value(10))
+                .andExpect(jsonPath("$[0].title").value("Calm Study Mix"))
+                .andExpect(jsonPath("$[0].senderUsername").value("musicfriend"))
+                .andExpect(jsonPath("$[0].message").value("For studying"))
+                .andExpect(jsonPath("$[1].playlistId").value(11));
     }
 }

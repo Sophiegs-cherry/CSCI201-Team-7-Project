@@ -1,10 +1,10 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
-import SharedWithMePage from './SharedWithMePage';
-import api from '../api/axios';
+import SharedWithMePage from '../SharedWithMePage';
+import api from '../../api/axios';
 
 // 1. Mock the API
-jest.mock('../api/axios');
+jest.mock('../../api/axios');
 
 const mockSharedPlaylists = [
   {

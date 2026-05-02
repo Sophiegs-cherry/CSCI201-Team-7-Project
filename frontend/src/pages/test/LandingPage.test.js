@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
-import LandingPage from './LandingPage';
+import LandingPage from '../LandingPage';
 
 // 1. Mock useNavigate from react-router-dom
 const mockedNavigate = jest.fn();

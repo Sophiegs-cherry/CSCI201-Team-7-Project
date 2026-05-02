@@ -1,10 +1,10 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
-import DashboardPage from './DashboardPage';
-import api from '../api/axios';
+import DashboardPage from '../DashboardPage';
+import api from '../../api/axios';
 
 // 1. Mock the API and Navigate
-jest.mock('../api/axios');
+jest.mock('../../api/axios');
 const mockedNavigate = jest.fn();
 jest.mock('react-router-dom', () => ({
   ...jest.requireActual('react-router-dom'),

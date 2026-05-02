@@ -1,9 +1,9 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import ShareModal from './ShareModal';
-import api from '../api/axios';
+import ShareModal from '../ShareModal';
+import api from '../../api/axios';
 
 // 1. Mock the API
-jest.mock('../api/axios');
+jest.mock('../../api/axios');
 
 const mockFriends = [
   { userId: 'u1', username: 'alex_music', displayName: 'Alex Smith' },

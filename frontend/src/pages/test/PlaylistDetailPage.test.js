@@ -1,11 +1,11 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import PlaylistDetailPage from './PlaylistDetailPage';
-import api from '../api/axios';
+import PlaylistDetailPage from '../PlaylistDetailPage';
+import api from '../../api/axios';
 
 // 1. Mock API and ShareModal
-jest.mock('../api/axios');
-jest.mock('./ShareModal', () => ({ onClose }) => (
+jest.mock('../../api/axios');
+jest.mock('../ShareModal', () => ({ onClose }) => (
   <div data-testid="share-modal">
     <button onClick={onClose}>Close Modal</button>
   </div>

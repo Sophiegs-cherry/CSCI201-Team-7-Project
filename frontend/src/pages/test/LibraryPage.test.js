@@ -1,10 +1,10 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
-import LibraryPage from './LibraryPage';
-import api from '../api/axios';
+import LibraryPage from '../LibraryPage';
+import api from '../../api/axios';
 
 // 1. Mock the API
-jest.mock('../api/axios');
+jest.mock('../../api/axios');
 
 const mockPlaylists = [
   {
