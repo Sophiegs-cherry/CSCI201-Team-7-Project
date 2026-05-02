@@ -16,14 +16,47 @@ React :3000  →  Spring Boot :8080  →  Flask :5001  →  Gemini AI + YouTube 
 
 **Prerequisites:** Java 17+, Python 3.9+, Node 18+, MySQL 8, Maven 3.8+
 
+### Local configuration
+
+These files are intentionally not committed and must be created locally:
+
+| File | What to set |
+|---|---|
+| `backend/src/main/resources/application.properties` | MySQL username/password, `jwt.secret`, optional port/CORS/Flask URL overrides |
+| `flask-service/.env` | `GEMINI_API_KEY` |
+
+Create them from the examples:
+
+```bash
+cp backend/src/main/resources/application.properties.example backend/src/main/resources/application.properties
+cp flask-service/.env.example flask-service/.env
+```
+
+Then edit:
+
+```properties
+# backend/src/main/resources/application.properties
+spring.datasource.username=root
+spring.datasource.password=YOUR_MYSQL_PASSWORD
+jwt.secret=CHANGE_ME_TO_A_32_PLUS_CHARACTER_SECRET
+jwt.expiration=86400000
+```
+
+```bash
+# flask-service/.env
+GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+```
+
+`jwt.secret` should be a private random string with at least 32 characters. Do not commit your real `application.properties` or `.env`.
+
+### Run locally
+
 ```bash
 # 1. MySQL
 mysql -u root -p -e "CREATE DATABASE moodtunes;"
-# Update backend/src/main/resources/application.properties with your credentials
 
 # 2. Flask
 cd flask-service && pip install -r requirements.txt
-cp .env.example .env   # fill in GEMINI_API_KEY
 python app.py          # :5001
 
 # 3. Spring Boot

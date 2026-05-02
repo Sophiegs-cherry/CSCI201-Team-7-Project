@@ -1,0 +1,103 @@
+.App {
+  min-height: 100vh;
+  background-color: #0a0e27;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+/* Global button styles */
+.btn {
+  padding: 10px 20px;
+  background-color: #1a1f3a;
+  color: #ffffff;
+  border: 1px solid #333;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn:hover {
+  background-color: #222;
+  border-color: #555;
+}
+
+.btn-primary {
+  background-color: #1a1f3a;
+  border: 1px solid #333;
+}
+
+.btn-primary:hover {
+  background-color: #222;
+}
+
+/* Chip/tag styles for mood/genre selection */
+.chip {
+  padding: 12px 24px;
+  background-color: #1a1f3a;
+  color: #ffffff;
+  border: 1px solid #333;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin: 6px;
+}
+
+.chip:hover {
+  border-color: #555;
+  background-color: #222;
+}
+
+.chip.active {
+  background-color: #7c3aed;
+  border-color: #7c3aed;
+  color: #ffffff;
+}
+
+/* Form input styles */
+.form-input {
+  display: block;
+  margin: 10px auto;
+  padding: 10px 12px;
+  width: 100%;
+  max-width: 250px;
+  background-color: #1a1f3a;
+  color: #ffffff;
+  border: 1px solid #333;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.form-input:focus {
+  border-color: #7c3aed;
+  outline: none;
+}
+
+.form-input::placeholder {
+  color: #666;
+}
+
+/* Text area styles */
+.form-textarea {
+  display: block;
+  margin: 10px auto;
+  padding: 10px 12px;
+  width: 100%;
+  max-width: 600px;
+  background-color: #1a1f3a;
+  color: #ffffff;
+  border: 1px solid #333;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.form-textarea:focus {
+  border-color: #7c3aed;
+  outline: none;
+}
+
+.form-textarea::placeholder {
+  color: #666;
+}

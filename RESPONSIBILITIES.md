@@ -65,7 +65,8 @@ CSCI201-Team-7-Project/
 │       │       ├── PlaylistTrack.java
 │       │       ├── Friendship.java
 │       │       └── SharedPlaylist.java
-│       ├── main/resources/application.properties
+│       ├── main/resources/application.properties.example
+│       ├── main/resources/application.properties  ← local only, not committed
 │       └── test/java/com/moodtunes/
 ├── flask-service/
 │   ├── app.py
@@ -132,7 +133,8 @@ CSCI201-Team-7-Project/
 | `backend/src/main/java/com/moodtunes/service/AuthService.java` | BCrypt hashing, JWT generation + validation |
 | `backend/src/main/java/com/moodtunes/repository/UserRepository.java` | `findByUsername()`, `findByEmail()` |
 | `backend/src/main/java/com/moodtunes/model/User.java` | `@Entity users`: userId, username, email, passwordHash, displayName, profilePicturePath, createdAt |
-| `backend/src/main/resources/application.properties` | DB URL, JWT secret — commit placeholder values only |
+| `backend/src/main/resources/application.properties.example` | committed placeholder backend config; copy to `application.properties` locally |
+| `backend/src/main/resources/application.properties` | local DB/JWT/runtime config only; ignored and not committed |
 
 ---
 
