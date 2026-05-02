@@ -66,6 +66,46 @@ cd backend && mvn spring-boot:run   # :8080
 cd frontend && npm install && npm start   # :3000
 ```
 
+## Run Tests
+
+Run each test suite from the repository root:
+
+```bash
+# Backend Spring Boot tests
+cd backend
+mvn test
+```
+
+```bash
+# Flask AI service tests
+cd flask-service
+.venv/bin/python -m pytest
+```
+
+If you do not have the Flask virtual environment yet:
+
+```bash
+cd flask-service
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt pytest pytest-mock
+.venv/bin/python -m pytest
+```
+
+```bash
+# Frontend React tests
+cd frontend
+npm test -- --watchAll=false
+```
+
+To run one frontend test file:
+
+```bash
+cd frontend
+npm test -- LoginPage.test.js --watchAll=false
+```
+
+The backend test configuration includes the JVM flag needed for Java 25 Mockito/Byte Buddy compatibility. On Java 17, the same `mvn test` command also works.
+
 ## API Endpoints
 
 All endpoints except `/api/auth/**` require `Authorization: Bearer <JWT>`.
