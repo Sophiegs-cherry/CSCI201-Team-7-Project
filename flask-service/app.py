@@ -4,6 +4,7 @@ from google import genai
 from dotenv import load_dotenv
 import json
 import os
+import time  # Added for timestamping Test 3.2
 from pathlib import Path
 
 load_dotenv(dotenv_path=Path(__file__).with_name(".env"), override=True)
@@ -21,7 +22,7 @@ def generate_playlist():
     music_preferences = data.get("musicPreferences", "")
     context = data.get("context", "")
 
-    # Return 400 if mood is empty (satisfies Test 3.5)
+    # Return 400 if mood is empty (satisfies Test 3.5) [cite: 79]
     if not mood:
         return jsonify({"error": "mood is required"}), 400
 
@@ -67,7 +68,6 @@ Rules:
     except json.JSONDecodeError as e:
         return jsonify({"error": f"Failed to parse Gemini response: {str(e)}"}), 500
 
-    # Validate each track via ytmusicapi
     playlist = []
     for song in songs:
         title = song.get("title", "")
@@ -89,7 +89,23 @@ Rules:
         except Exception:
             continue  # skip failed lookups, don't crash
 
-    return jsonify(playlist)  # flat array, no wrapper
+    # --- Logic for Test 3.2: Save JSON File --- 
+    try:
+        # Create the playlists directory if it doesn't exist
+        os.makedirs("playlists", exist_ok=True)
+        
+        # Generate filename with timestamp 
+        timestamp = int(time.time())
+        filename = f"playlists/playlist-{timestamp}.json"
+        
+        # Write the final playlist to the file 
+        with open(filename, "w") as f:
+            json.dump(playlist, f)
+    except Exception as e:
+        # Log error but don't fail the request for the user
+        print(f"Warning: Failed to save playlist file: {e}")
+
+    return jsonify(playlist)
 
 if __name__ == "__main__":
     app.run(port=5001, debug=True)

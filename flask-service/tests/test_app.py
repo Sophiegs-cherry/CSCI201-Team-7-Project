@@ -7,6 +7,8 @@ Covers Testing Plan sections 3.4-3.5 plus additional edge cases
 
 import pytest
 import json
+import os
+import glob
 from app import app
 
 
@@ -20,6 +22,49 @@ def client():
 
 class TestFlaskPlaylistGeneration:
     """Test suite for Flask playlist generation endpoint"""
+
+    def test_playlist_generation_saves_json_file(self, client, mocker):
+        """
+        Test 3.2 — Playlist Generation Saves JSON File
+        Type: White box, integration test 
+        Expected: A file exists at playlists/playlist-{timestamp}.json 
+        """
+        # 1. Arrange - Mock external dependencies
+        mock_songs = [{"title": "Test Save", "artist": "Test Artist"}]
+        
+        class MockGeminiResponse:
+            def __init__(self):
+                self.text = json.dumps(mock_songs)
+
+        mocker.patch('app.client.models.generate_content', return_value=MockGeminiResponse())
+        mocker.patch('app.ytmusic.search', return_value=[{"videoId": "test_id"}])
+
+        # 2. Act - Trigger the generation
+        response = client.post('/generate-playlist',
+            json={'mood': 'test_save'},
+            content_type='application/json'
+        )
+
+        # 3. Assert - Check HTTP Success
+        assert response.status_code == 200
+
+        # 4. Assert - Check File System 
+        # Use glob to find the file because of the dynamic timestamp
+        playlist_files = glob.glob('playlists/playlist-*.json')
+        assert len(playlist_files) > 0, "A playlist JSON file should have been created in /playlists"
+
+        # Get the most recently created file in that folder
+        latest_file = max(playlist_files, key=os.path.getctime)
+        
+        with open(latest_file, 'r') as f:
+            saved_data = json.load(f)
+            
+        # Verify the saved file contains the expected data
+        assert saved_data[0]['trackName'] == "Test Save"
+        assert saved_data[0]['artistName'] == "Test Artist"
+
+        # 5. Cleanup - Remove the specific test file created
+        os.remove(latest_file)
 
     def test_generate_playlist_returns_valid_tracks(self, client, mocker):
         """
