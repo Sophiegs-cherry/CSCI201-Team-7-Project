@@ -108,7 +108,7 @@ public class FriendService {
     @Transactional(readOnly = true)
     public List<FriendshipView> listFriends(String username) {
         Integer userId = requireUser(username).getUserId();
-        List<Friendship> all = friendships.findAcceptedFriendshipsForUser(userId);
+        List<Friendship> all = friendships.findFriendshipsForUserByStatus(userId, Friendship.Status.ACCEPTED);
         List<FriendshipView> out = new ArrayList<>(all.size());
         for (Friendship f : all) {
             User other = f.getRequester().getUserId().equals(userId) ? f.getAddressee() : f.getRequester();

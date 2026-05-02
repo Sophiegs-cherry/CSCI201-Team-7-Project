@@ -4,8 +4,9 @@ from google import genai
 from dotenv import load_dotenv
 import json
 import os
+from pathlib import Path
 
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).with_name(".env"), override=True)
 
 app = Flask(__name__)
 

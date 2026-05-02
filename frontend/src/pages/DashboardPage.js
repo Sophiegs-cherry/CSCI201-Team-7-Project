@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "../api/axios";
 
 const MOODS = [
   { key: "happy",     label: "Happy",     emoji: "☀️", color: "#FBBF24" },
@@ -14,42 +14,6 @@ const MOODS = [
 ];
 
 const GENRES = ["Pop","Rock","Hip-Hop","Electronic","Jazz","Indie","R&B","Classical","Metal","Lo-Fi"];
-
-function Navbar({ active }) {
-  const navigate = useNavigate();
-  return (
-    <nav style={nav.bar}>
-      <span style={nav.brand} onClick={() => navigate("/dashboard")}>
-        <span style={nav.dot} />
-        MoodTunes
-      </span>
-      <div style={nav.links}>
-        {["Dashboard","Library","Friends","History"].map((l) => (
-          <span
-            key={l}
-            onClick={() => navigate("/" + l.toLowerCase())}
-            style={{
-              ...nav.link,
-              color: active === l ? "#fff" : "rgba(255,255,255,0.4)",
-              fontWeight: active === l ? 700 : 500,
-            }}
-          >
-            {l}
-          </span>
-        ))}
-        <span style={{ ...nav.link, color: "rgba(255,255,255,0.4)" }}>Logout</span>
-      </div>
-    </nav>
-  );
-}
-
-const nav = {
-  bar: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 28px", borderBottom: "1px solid rgba(255,255,255,0.08)", background: "#0d0d14" },
-  brand: { color: "#fff", fontWeight: 800, fontSize: 18, letterSpacing: "-0.03em", display: "flex", alignItems: "center", gap: 8, cursor: "pointer" },
-  dot: { width: 8, height: 8, borderRadius: "50%", background: "#a78bfa", display: "inline-block" },
-  links: { display: "flex", gap: 28 },
-  link: { fontSize: 14, cursor: "pointer", transition: "color 0.15s" },
-};
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -72,34 +36,25 @@ export default function DashboardPage() {
     setError("");
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
-      const headers = { Authorization: `Bearer ${token}` };
-
-      const moodText = `I'm feeling ${selectedMood.label.toLowerCase()}${
-        selectedGenres.length > 0 ? `, and I enjoy ${selectedGenres.join(", ")}` : ""
-      }`;
+      const moodText = selectedMood.label.toLowerCase();
       const musicPreferences = selectedGenres.length > 0 ? selectedGenres.join(", ") : undefined;
 
-      const moodResponse = await axios.post(
-        "/api/moods/log",
-        { moodText, musicPreferences, contextNote: contextNote || undefined },
-        { headers }
-      );
-      const moodId = moodResponse.data.moodId;
-
-      const playlistResponse = await axios.post(
+      const playlistResponse = await api.post(
         "/api/playlists/generate",
-        { moodId },
-        { headers }
+        {
+          mood: moodText,
+          musicPreferences,
+          context: contextNote || undefined,
+        }
       );
 
       navigate("/playlist", {
         state: {
           playlist: playlistResponse.data,
-          moodId,
           moodLabel: selectedMood.label,
           moodColor: selectedMood.color,
           moodEmoji: selectedMood.emoji,
+          musicPreferences,
           contextNote,
         },
       });
@@ -114,8 +69,6 @@ export default function DashboardPage() {
 
   return (
     <div style={s.page}>
-      <Navbar active="Dashboard" />
-
       <div style={s.container}>
         <div>
           <h1 style={s.title}>How are you feeling<br />today?</h1>

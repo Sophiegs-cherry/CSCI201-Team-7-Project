@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import './SharedWithMePage.css';
 import api from '../api/axios';
 
@@ -58,9 +59,18 @@ useEffect(() => {
       {item.message && <div className="shared-message">"{item.message}"</div>}
     </div>
 
-    <a href={`/playlist/${item.playlistId}`} className="shared-view-btn">
+    <Link
+      to={`/playlist/${item.playlistId}`}
+      state={{
+        from: 'shared',
+        sharedMessage: item.message,
+        senderUsername: item.senderUsername,
+        sharedAt: item.sharedAt,
+      }}
+      className="shared-view-btn"
+    >
       View Playlist →
-    </a>
+    </Link>
   </div>
 ))}
         </div>

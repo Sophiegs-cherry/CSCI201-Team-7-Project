@@ -95,19 +95,32 @@ public class PlaylistController {
     }
 
     // ── POST /api/playlists/save ──────────────────────────────────────────────
-    // Request: { title, moodId, tracks: [{trackName, artistName, youtubeMusicUrl, trackOrder}] }
+    // Request: { title, moodId? OR mood, musicPreferences?, context?,
+    //            tracks: [{trackName, artistName, youtubeMusicUrl, trackOrder}] }
     @PostMapping("/save")
     public ResponseEntity<?> savePlaylist(@RequestBody Map<String, Object> request, Principal principal) {
         User user = userRepository.findByUsername(principal.getName())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         Object moodIdObj = request.get("moodId");
-        if (moodIdObj == null) {
-            return ResponseEntity.badRequest().body(Map.of("error", "moodId is required"));
+        Mood mood;
+        if (moodIdObj != null) {
+            int moodId = ((Number) moodIdObj).intValue();
+            mood = moodRepository.findById(moodId)
+                    .orElseThrow(() -> new RuntimeException("Mood not found"));
+        } else {
+            String moodText = (String) request.get("mood");
+            if (moodText == null || moodText.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "mood is required"));
+            }
+            mood = new Mood();
+            mood.setUser(user);
+            mood.setMoodText(moodText);
+            mood.setMusicPreferences((String) request.get("musicPreferences"));
+            mood.setContextNote((String) request.get("context"));
+            mood.setCreatedAt(java.time.LocalDateTime.now());
+            mood = moodRepository.save(mood);
         }
-        int moodId = ((Number) moodIdObj).intValue();
-        Mood mood = moodRepository.findById(moodId)
-                .orElseThrow(() -> new RuntimeException("Mood not found"));
 
         String title = (String) request.get("title");
         if (title == null || title.isBlank()) {
@@ -194,13 +207,30 @@ public class PlaylistController {
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         Playlist playlist = playlistRepository.findById(id).orElse(null);
-        if (playlist == null || playlist.getUser().getUserId() != user.getUserId()) {
+        if (playlist == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "Playlist not found"));
+        }
+
+        boolean ownsPlaylist = Objects.equals(playlist.getUser().getUserId(), user.getUserId());
+        Optional<SharedPlaylist> sharedPlaylist = ownsPlaylist
+                ? Optional.empty()
+                : sharedPlaylistRepository.findByPlaylistPlaylistIdAndRecipientUserId(id, user.getUserId());
+        boolean sharedWithUser = sharedPlaylist.isPresent();
+        if (!ownsPlaylist && !sharedWithUser) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(Map.of("error", "Playlist not found or access denied"));
         }
 
         List<PlaylistTrack> tracks = playlistTrackRepository.findByPlaylistId(id);
-        return ResponseEntity.ok(buildPlaylistResponse(playlist, tracks));
+        Map<String, Object> response = buildPlaylistResponse(playlist, tracks);
+        sharedPlaylist.ifPresent(sp -> {
+            response.put("shared", true);
+            response.put("sharedMessage", sp.getMessage());
+            response.put("sharedAt", sp.getSharedAt());
+            response.put("sharedBy", sp.getSender().getUsername());
+        });
+        return ResponseEntity.ok(response);
     }
 
     // ── POST /api/playlists/share ─────────────────────────────────────────────

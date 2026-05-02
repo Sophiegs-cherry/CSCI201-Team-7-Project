@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "../api/axios";
  
 const MOOD_COLORS = {
   happy:     { color: "#FBBF24", emoji: "☀️" },
@@ -11,42 +11,6 @@ const MOOD_COLORS = {
   angry:     { color: "#FB923C", emoji: "🔥" },
   anxious:   { color: "#A78BFA", emoji: "🌀" },
   focused:   { color: "#34D399", emoji: "🎯" },
-};
- 
-function Navbar({ active }) {
-  const navigate = useNavigate();
-  return (
-    <nav style={nav.bar}>
-      <span style={nav.brand} onClick={() => navigate("/dashboard")}>
-        <span style={nav.dot} />
-        MoodTunes
-      </span>
-      <div style={nav.links}>
-        {["Dashboard","Library","Friends","History"].map((l) => (
-          <span
-            key={l}
-            onClick={() => navigate("/" + l.toLowerCase())}
-            style={{
-              ...nav.link,
-              color: active === l ? "#fff" : "rgba(255,255,255,0.4)",
-              fontWeight: active === l ? 700 : 500,
-            }}
-          >
-            {l}
-          </span>
-        ))}
-        <span style={{ ...nav.link, color: "rgba(255,255,255,0.4)" }}>Logout</span>
-      </div>
-    </nav>
-  );
-}
- 
-const nav = {
-  bar: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 28px", borderBottom: "1px solid rgba(255,255,255,0.08)", background: "#0d0d14" },
-  brand: { color: "#fff", fontWeight: 800, fontSize: 18, letterSpacing: "-0.03em", display: "flex", alignItems: "center", gap: 8, cursor: "pointer" },
-  dot: { width: 8, height: 8, borderRadius: "50%", background: "#a78bfa", display: "inline-block" },
-  links: { display: "flex", gap: 28 },
-  link: { fontSize: 14, cursor: "pointer", transition: "color 0.15s" },
 };
  
 function TrackRow({ track, index }) {
@@ -81,9 +45,10 @@ export default function PlaylistPage() {
   const moodLabel  = location.state?.moodLabel;
   const moodColor  = location.state?.moodColor;
   const moodEmoji  = location.state?.moodEmoji;
+  const musicPreferences = location.state?.musicPreferences;
   const contextNote = location.state?.contextNote;
  
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState(() => Boolean(playlist?.playlistId));
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
  
@@ -106,20 +71,21 @@ export default function PlaylistPage() {
     if (saved) return;
     setSaving(true); setSaveError("");
     try {
-      const token = localStorage.getItem("token");
-      await axios.post(
+      await api.post(
         "/api/playlists/save",
         {
           title: playlist.title || `${moodLabel} Vibes`,
           moodId,
+          mood: playlist.mood || moodLabel?.toLowerCase(),
+          musicPreferences: playlist.musicPreferences || musicPreferences,
+          context: playlist.context || contextNote,
           tracks: tracks.map((t, i) => ({
             trackName: t.trackName,
             artistName: t.artistName,
             youtubeMusicUrl: t.youtubeMusicUrl || "",
             trackOrder: t.trackOrder || i + 1,
           })),
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
+        }
       );
       setSaved(true);
     } catch (err) {
@@ -129,8 +95,6 @@ export default function PlaylistPage() {
  
   return (
     <div style={s.page}>
-      <Navbar />
- 
       <div style={s.container}>
         <button onClick={() => navigate("/dashboard")} style={s.backLink}>← Generate another</button>
  

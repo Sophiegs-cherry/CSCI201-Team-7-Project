@@ -17,9 +17,11 @@ public interface FriendshipRepository extends JpaRepository<Friendship, Integer>
     List<Friendship> findByRequesterUserIdAndStatus(Integer requesterId, Friendship.Status status);
 
     @Query("SELECT f FROM Friendship f " +
-           "WHERE f.status = com.moodtunes.model.Friendship.Status.ACCEPTED " +
+           "WHERE f.status = :status " +
            "AND (f.requester.userId = :userId OR f.addressee.userId = :userId)")
-    List<Friendship> findAcceptedFriendshipsForUser(@Param("userId") Integer userId);
+    List<Friendship> findFriendshipsForUserByStatus(
+            @Param("userId") Integer userId,
+            @Param("status") Friendship.Status status);
 
     @Query("SELECT f FROM Friendship f " +
            "WHERE (f.requester.userId = :a AND f.addressee.userId = :b) " +

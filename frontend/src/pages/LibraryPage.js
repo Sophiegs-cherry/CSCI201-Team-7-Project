@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import './LibraryPage.css';
 import api from '../api/axios';
 
@@ -25,7 +26,7 @@ function PlaylistCard({ playlist }) {
         <h3 className="card-title">{playlist.title}</h3>
         <p className="card-meta">{new Date(playlist.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} · {songCount} songs</p>
         <p className="card-mood">"{moodText}"</p>
-        <a href={`/playlist/${playlist.playlistId}`} className="card-link">View playlist →</a>
+        <Link to={`/playlist/${playlist.playlistId}`} className="card-link">View playlist →</Link>
       </div>
     </div>
   );

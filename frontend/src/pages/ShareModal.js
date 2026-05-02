@@ -5,7 +5,9 @@ import api from '../api/axios';
 const avatarColors = ['#FBBF24', '#38BDF8', '#F87171', '#818CF8', '#F472B6', '#FB923C', '#34D399'];
 
 function getInitials(displayName) {
-  return displayName.split(' ').map(w => w[0]).join('').toUpperCase();
+  const name = String(displayName || '').trim();
+  if (!name) return '?';
+  return name.split(/\s+/).map(w => w[0]).join('').toUpperCase();
 }
 
 function getAvatarColor(index) {
@@ -59,24 +61,30 @@ useEffect(() => {
               {friends.length === 0 && !error && (
                 <p style={{ color: '#555', fontSize: '0.9rem' }}>No friends to share with yet.</p>
               )}
-              {friends.map((friend, i) => (
-                <div
-                  key={friend.userId}
-                  className={`modal-friend-row ${selected.includes(friend.userId) ? 'selected' : ''}`}
-                  onClick={() => toggleFriend(friend.userId)}
-                >
-                  <div className="modal-checkbox">
-                    {selected.includes(friend.userId) ? '✓' : ''}
+              {friends.map((friendship, i) => {
+                const friend = friendship.user || friendship;
+                const userId = friend.userId;
+                const displayName = friend.displayName || friend.username || 'Unknown user';
+
+                return (
+                  <div
+                    key={userId ?? friendship.friendshipId ?? i}
+                    className={`modal-friend-row ${selected.includes(userId) ? 'selected' : ''}`}
+                    onClick={() => userId && toggleFriend(userId)}
+                  >
+                    <div className="modal-checkbox">
+                      {selected.includes(userId) ? '✓' : ''}
+                    </div>
+                    <div className="modal-avatar" style={{ background: getAvatarColor(i) }}>
+                      {getInitials(displayName)}
+                    </div>
+                    <div className="modal-friend-info">
+                      <span className="modal-friend-username">{friend.username || displayName}</span>
+                      <span className="modal-friend-displayname">{displayName}</span>
+                    </div>
                   </div>
-                  <div className="modal-avatar" style={{ background: getAvatarColor(i) }}>
-                    {getInitials(friend.displayName || friend.username)}
-                  </div>
-                  <div className="modal-friend-info">
-                    <span className="modal-friend-username">{friend.username}</span>
-                    <span className="modal-friend-displayname">{friend.displayName}</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="modal-message-section">
