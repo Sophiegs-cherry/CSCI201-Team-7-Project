@@ -1,0 +1,212 @@
+# AI-Assisted Development Log
+# MoodTunes - CSCI 201 Final Project
+# Student Name: Daniel Sim
+# Date: May 1, 2026
+
+================================================================================
+SESSION 1: Planning the Playlist Generation Architecture
+================================================================================
+
+PROMPT 1:
+"We want to use Gemini AI instead of Last.fm to generate playlists. How should
+we integrate it into our existing Spring Boot + React architecture?"
+
+AI RESPONSE SUMMARY:
+- Replace Last.fm with Gemini API for song generation
+- Use a Python Flask microservice just for playlist generation
+- Java Spring Boot remains the main backend; frontend never calls Flask directly
+- Two options: Option 1 (Gemini with Google Search grounding for links),
+  Option 2 (Gemini for song names + ytmusicapi for verified YouTube Music links)
+
+WHAT I LEARNED:
+- Gemini can hallucinate song links in Option 1, making Option 2 more reliable
+- A microservice architecture lets you use Python libraries (ytmusicapi) alongside
+  an existing Java backend without rewriting everything
+- The frontend should only talk to Java; Java talks to Flask internally
+
+CODE SNIPPET USED:
+```
+Architecture flow:
+Frontend → Java (8080) → Flask (5001) → Gemini API + ytmusicapi → Java → Frontend
+```
+
+--------------------------------------------------------------------------------
+
+PROMPT 2:
+"Option 1 produces links to songs that are different from what Gemini says.
+How do we use ytmusicapi to fix this?"
+
+AI RESPONSE SUMMARY:
+- Gemini should only generate song names and artists — no links
+- ytmusicapi independently searches YouTube Music for each song
+- This guarantees the link matches the actual song
+- Easier to implement in Python, so a Flask microservice is the right approach
+
+WHAT I LEARNED:
+- Separating concerns: Gemini handles song selection, ytmusicapi handles link
+  verification — each tool does what it's good at
+- ytmusicapi does not require authentication for search queries
+- Java can call the Flask service via RestTemplate with a simple POST request
+
+CODE SNIPPET USED:
+```python
+def get_yt_music_link(track_name, artist):
+    query = f"{track_name} {artist}"
+    results = ytmusic.search(query, filter="songs", limit=1)
+    if results:
+        video_id = results[0]["videoId"]
+        return f"https://music.youtube.com/watch?v={video_id}"
+    return None
+```
+
+================================================================================
+SESSION 2: Setting Up the Python Flask Microservice
+================================================================================
+
+PROMPT 3:
+"How do I run this Flask microservice on VS Code and what commands do I need?"
+
+AI RESPONSE SUMMARY:
+- Install Python extension in VS Code
+- Create virtual environment with python -m venv venv
+- Activate with venv\Scripts\activate on Windows
+- Install dependencies: flask, ytmusicapi, google-genai, python-dotenv
+- Store API key in .env file, never hardcode it
+- Run with python app.py, test with Invoke-WebRequest or a test.py script
+
+WHAT I LEARNED:
+- Virtual environments isolate project dependencies from system Python
+- .env files keep API keys out of source code
+- PowerShell's curl is not real curl — use Invoke-WebRequest syntax or a
+  Python test script instead
+
+CODE SNIPPET USED:
+```bash
+python -m venv venv
+venv\Scripts\activate
+pip install flask ytmusicapi google-genai python-dotenv
+python app.py
+```
+
+--------------------------------------------------------------------------------
+
+PROMPT 4:
+"I'm getting a 404 models/gemini-1.5-flash is not found error. How do I fix it?"
+
+AI RESPONSE SUMMARY:
+- The google.generativeai package is deprecated — switch to google-genai
+- Use client.models.list() to see which models are available for your API key
+- gemini-2.5-flash is the correct model name for this key
+
+WHAT I LEARNED:
+- Google deprecated the old generativeai library; the new package is google-genai
+  with a different import and client initialization pattern
+- Always verify available model names with list_models before hardcoding one
+- Model name strings are version-specific and change between API releases
+
+CODE SNIPPET USED:
+```python
+from google import genai
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+response = client.models.generate_content(
+    model="gemini-2.5-flash",
+    contents=prompt
+)
+```
+
+================================================================================
+SESSION 3: Fixing API Quota Issues
+================================================================================
+
+PROMPT 5:
+"I keep getting 429 ResourceExhausted quota exceeded errors even with a fresh
+API key. How do I fix this?"
+
+AI RESPONSE SUMMARY:
+- limit: 0 means the key was created under the same Google Cloud project as
+  the old one — they share the same quota
+- Fix: create a brand new Google Cloud project at aistudio.google.com and
+  generate a key under that new project
+- Alternative: claim $300 free credits at cloud.google.com/free
+- Add retry logic to app.py so it handles quota errors gracefully
+
+WHAT I LEARNED:
+- API keys from the same Google Cloud project share quota — a new key alone
+  does not reset the limit
+- Free tier quota is per project, not per key
+- Always wrap Gemini API calls in try/except to return a clean error message
+  instead of a 500 crash
+
+CODE SNIPPET USED:
+```python
+for attempt in range(3):
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash", contents=prompt)
+        break
+    except Exception as e:
+        if "429" in str(e) and attempt < 2:
+            time.sleep(10)
+        else:
+            return jsonify({"error": "Gemini quota exceeded."}), 429
+```
+
+================================================================================
+SESSION 4: Verifying the Full Pipeline Works
+================================================================================
+
+PROMPT 6:
+"How do I see the full JSON output from the playlist endpoint?"
+
+AI RESPONSE SUMMARY:
+- PowerShell truncates Invoke-WebRequest output by default
+- Save the full response using $response.Content | Out-File playlist.json
+- Or add file-write logic directly in app.py to auto-save every response
+- Open the saved file in VS Code with: code playlist.json
+
+WHAT I LEARNED:
+- PowerShell truncates long responses — always save to file for inspection
+- json.dump() in Python writes pretty-printed JSON to disk
+- A 200 OK status with playlist data confirms the full chain works:
+  Flask → Gemini → ytmusicapi → verified JSON response
+
+CODE SNIPPET USED:
+```powershell
+$response = Invoke-WebRequest -Uri http://localhost:5001/generate-playlist `
+  -Method POST `
+  -Headers @{"Content-Type"="application/json"} `
+  -Body '{"mood": "happy", "genres": ["pop", "hip-hop"]}' `
+  -UseBasicParsing
+$response.Content | Out-File -FilePath "playlist.json" -Encoding utf8
+```
+
+================================================================================
+REFLECTION
+================================================================================
+
+Most useful AI assistance:
+- Designing the microservice architecture so Python and Java work together
+- Diagnosing the Gemini quota issue (same project = shared quota)
+- Switching from the deprecated google.generativeai to the new google-genai package
+- Identifying the correct model name (gemini-2.5-flash) for the available API key
+
+Challenges I solved with AI help:
+- Option 1 producing wrong YouTube Music links → switched to ytmusicapi verification
+- PowerShell curl syntax not working → used Invoke-WebRequest and test.py instead
+- 404 model not found error → listed available models and picked the right one
+- 429 quota errors persisting with new key → created a new Google Cloud project
+
+What I would do differently:
+- Create a new Google Cloud project immediately instead of reusing the same one
+- Test the Gemini model name with list_models before building around it
+- Set up the .env file and .gitignore before writing any code
+
+Key concepts learned:
+- Python virtual environments and dependency isolation
+- Flask microservice as a sidecar to a Java backend
+- Gemini API model versioning and free-tier quota limits
+- ytmusicapi for verified YouTube Music link resolution
+- PowerShell vs real curl syntax differences on Windows
+
+Time spent: ~6 hours
+AI tools used: Claude

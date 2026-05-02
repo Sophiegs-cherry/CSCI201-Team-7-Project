@@ -1,0 +1,854 @@
+# AI-Assisted Development Log
+# MoodTunes - CSCI 201 Final Project (Team 7)
+# Student Name: Wenwei Fu
+# Role: Backend - Mood & Playlist Persistence + Final Branch Integration
+# Date: 05.01.2026
+# AI tools used: Claude Code
+
+
+================================================================================
+PART A — Backend: Mood & Playlist Persistence (branch: wenwei/backend-mood-playlist)
+================================================================================
+
+1) First Prompt:
+
+    under CSCI201-Team-7-Project/backend/ on the wenwei/backend-mood-playlist branch:
+
+    You are an expert Spring Boot backend developer. Build the Mood and Playlist
+    persistence layer for the MoodTunes app. The app lets a logged-in user type a
+    mood, generate a 15–20 song playlist (Sid's service calls Flask + Gemini),
+    save the playlist to a personal library, view it later, and share it with a
+    friend. I own the persistence side — entities, repositories, and the
+    non-/generate endpoints on PlaylistController, plus the entire MoodController.
+
+    Requirements:
+
+    1. JPA entities (com.moodtunes.model):
+       - Mood: moodId (PK), user (ManyToOne -> User), moodText, musicPreferences,
+         contextNote, createdAt
+       - Playlist: playlistId (PK), user (ManyToOne -> User), mood (ManyToOne -> Mood,
+         nullable), title, createdAt
+       - PlaylistTrack: trackId (PK), playlist (ManyToOne -> Playlist, cascade on
+         delete), trackName, artistName, youtubeMusicUrl, trackOrder (1–20)
+
+    2. Repositories (com.moodtunes.repository):
+       - MoodRepository: findByUserIdOrderByCreatedAtDesc(int userId)
+       - PlaylistRepository: findByUserIdOrderByCreatedAtDesc(int userId)
+       - PlaylistTrackRepository: findByPlaylistId(int playlistId), ordered by trackOrder
+
+    3. Controllers:
+       A. MoodController (/api/moods):
+          - POST /log         — log a mood entry for the current JWT user
+          - GET  /history     — return user's mood history newest-first
+
+       B. PlaylistController — I own everything EXCEPT POST /generate (Sid owns it):
+          - POST /save        — persist a generated playlist + its tracks
+          - GET  /library     — list current user's playlists
+          - GET  /{id}        — get one playlist with its ordered tracks
+          - POST /share       — share a playlist with a friend (writes
+                                shared_playlists; uses Suzy's SharedPlaylistRepository)
+          - GET  /shared      — list playlists shared TO the current user
+
+    4. Constraints (from CLAUDE.md):
+       - All endpoints require JWT auth (only /api/auth/** is public)
+       - Pull current user via the JWT — never trust a userId from the request body
+       - BCrypt is owned by Sophie; do not touch AuthService
+       - JSON file dump (playlists/playlist-*.json) is Sid's job — do not duplicate
+       - Co-owned file rule: PlaylistController is shared with Sid. Add my five
+         endpoints; leave /generate alone.
+
+    Generate the entities, repositories, and controllers with proper @Transactional
+    boundaries and DTOs for save/share request bodies.
+
+First Output Response:
+    Task receipt: implement Mood + Playlist persistence layer for MoodTunes.
+    Plan:
+
+    •  [x] Create JPA entities Mood, Playlist, PlaylistTrack with FK relations to User
+    •  [x] Add repositories with the queries listed in RESPONSIBILITIES.md
+    •  [x] Build MoodController with /log and /history backed by MoodRepository
+    •  [x] Add five endpoints to PlaylistController (save, library, {id}, share, shared)
+          without touching Sid's /generate handler
+    •  [x] Add request DTOs: SavePlaylistRequest (title, moodId, tracks[]),
+          SharePlaylistRequest (playlistId, recipientUserId, message)
+    •  [x] Pull the current user from JWT principal in every handler — never accept
+          userId from the body
+    •  [x] Wire SharedPlaylist writes through Suzy's SharedPlaylistRepository
+
+    Implemented persistence layer for MoodTunes. Mood and Playlist entities each
+    own a FK to User; PlaylistTrack belongs to Playlist with cascade delete so
+    removing a playlist tears down its tracks. All five PlaylistController endpoints
+    resolve the current user from the JWT via SecurityContextHolder, then delegate
+    to repositories. Sharing writes a SharedPlaylist row referencing both the sender
+    (current user) and recipient. /generate was left untouched for Sid.
+
+First Changes:
+    New entities (model/):
+    Mood.java            - @Entity moods; ManyToOne User, fields moodText,
+                           musicPreferences, contextNote, createdAt (@PrePersist)
+    Playlist.java        - @Entity playlists; ManyToOne User, optional ManyToOne Mood,
+                           title, createdAt
+    PlaylistTrack.java   - @Entity playlist_tracks; ManyToOne Playlist with
+                           cascade=REMOVE, fields trackName, artistName,
+                           youtubeMusicUrl, trackOrder (Integer 1..20)
+
+    New repositories (repository/):
+    MoodRepository           - findByUserIdOrderByCreatedAtDesc(Long userId)
+    PlaylistRepository       - findByUserIdOrderByCreatedAtDesc(Long userId)
+    PlaylistTrackRepository  - findByPlaylistIdOrderByTrackOrderAsc(Long playlistId)
+
+    New controller methods:
+    MoodController.java          - POST /api/moods/log, GET /api/moods/history
+    PlaylistController.java      - POST /save, GET /library, GET /{id},
+                                   POST /share, GET /shared (all under /api/playlists)
+
+    DTOs (controller/dto/):
+    SavePlaylistRequest, SharePlaylistRequest, PlaylistResponse, TrackDto
+
+Issues:
+    - GET /api/playlists/{id} returns the playlist but tracks come back in random
+      order because the repository derived query has no ORDER BY.
+    - POST /api/playlists/save throws LazyInitializationException when Jackson
+      tries to serialize the Playlist's User back to JSON.
+    - POST /api/playlists/save accepts a request with empty/blank title or mood
+      and writes junk rows.
+    - POST /api/playlists/share lets a user share a playlist they don't own.
+    - GET /api/playlists/{id} returns 500 instead of forwarding to
+      /api/playlists/shared when the literal path "shared" is hit.
+    - The friend share writes into shared_playlists but the recipient's
+      GET /shared returns nothing — recipient column on the row is null.
+
+
+--------------------------------------------------------------------------------
+
+2) Second Prompt (Issue 1 Fix — track order in GET /{id}):
+
+    My GET /api/playlists/{id} returns the playlist and its tracks correctly, but
+    the tracks come back in a different order on every refresh. The frontend
+    (Matthew's PlaylistDetailPage) renders them in whatever order I send. My
+    repository call is:
+
+        List<PlaylistTrack> tracks = playlistTrackRepository.findByPlaylistId(id);
+
+    The trackOrder column is populated correctly in MySQL (1..N). Why are they
+    coming back unordered?
+
+Second Output Response (Issue 1 Fix):
+    JPA does not guarantee any ordering on a derived query unless you ask for one.
+    Without an ORDER BY clause, MySQL is free to return rows in whatever physical
+    order is cheapest — which after a few inserts and updates is no longer the
+    insertion order. Use an explicit @Query with ORDER BY t.trackOrder ASC so the
+    contract is visible at the repository level (and you can still keep the short
+    method name findByPlaylistId at the call sites).
+
+Second Changes (Issue 1):
+    In PlaylistTrackRepository.java, replaced the bare derived query with an
+    explicit JPQL @Query:
+
+    Before:
+        List<PlaylistTrack> findByPlaylistId(int playlistId);
+
+    After:
+        @Query("SELECT t FROM PlaylistTrack t WHERE t.playlist.playlistId = :playlistId "
+             + "ORDER BY t.trackOrder ASC")
+        List<PlaylistTrack> findByPlaylistId(@Param("playlistId") int playlistId);
+
+    Tracks now consistently come back in trackOrder 1..N. The same @Query
+    pattern was applied to PlaylistRepository for the user-id lookup so both
+    repositories use explicit JPQL instead of derived names.
+
+
+--------------------------------------------------------------------------------
+
+3) Third Prompt (Issue 2 Fix — LazyInitializationException on save):
+
+    POST /api/playlists/save persists everything correctly to the DB, but the
+    response throws a LazyInitializationException when Jackson tries to serialize
+    the saved Playlist. Stack trace points at Playlist.user. I am returning the
+    saved entity directly:
+
+        Playlist saved = playlistRepository.save(playlist);
+        return ResponseEntity.ok(saved);
+
+    User is @ManyToOne(fetch = LAZY). What's the right fix — switch to EAGER, or
+    something else?
+
+Third Output Response (Issue 2 Fix):
+    Don't switch User to EAGER — that will cascade the same problem onto every
+    other entity that references User and balloon query times. The right fix is to
+    stop returning JPA entities from the controller layer at all. Instead build a
+    response Map with only the fields the frontend actually needs (playlistId,
+    title, createdAt, mood, tracks[]). A small private buildPlaylistResponse()
+    helper keeps the shape consistent across save / get / share.
+
+Third Changes (Issue 2):
+    Added a private helper in PlaylistController:
+
+        private Map<String, Object> buildPlaylistResponse(Playlist playlist,
+                                                          List<PlaylistTrack> tracks) {
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("playlistId", playlist.getPlaylistId());
+            response.put("title",      playlist.getTitle());
+            response.put("createdAt",  playlist.getCreatedAt());
+            if (playlist.getMood() != null) { ... moodMap ... }
+            List<Map<String, Object>> trackList = new ArrayList<>();
+            for (PlaylistTrack t : tracks) { /* trackId, trackName, ... */ }
+            response.put("tracks", trackList);
+            return response;
+        }
+
+    Before:
+        Playlist saved = playlistRepository.save(playlist);
+        return ResponseEntity.ok(saved);
+
+    After:
+        Playlist saved = playlistRepository.save(playlist);
+        playlistTrackRepository.saveAll(tracks);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                             .body(buildPlaylistResponse(saved, tracks));
+
+    No more LazyInitializationException, the User entity (with passwordHash) is
+    no longer leaked on responses, and getPlaylist() / sharePlaylist() reuse the
+    same helper for a consistent shape.
+
+
+--------------------------------------------------------------------------------
+
+4) Fourth Prompt (Issue 3 Fix — empty title/mood accepted on /save):
+
+    POST /api/playlists/save currently accepts a request body where title is ""
+    or just whitespace, and where neither a moodId nor a mood text was supplied,
+    and happily writes the empty rows. Simra hit this once when an accidental
+    double-Submit fired an empty body. I want server-side guards, not just
+    frontend trust. What's the lightest way given my controller already takes
+    a Map<String, Object> body (because the track payload is dynamic)?
+
+Fourth Output Response (Issue 3 Fix):
+    Since you're already pulling fields out of a Map, the cheapest fix is inline
+    null/blank guards at the top of savePlaylist that return ResponseEntity
+    .badRequest() with a clear JSON {"error": "..."} message before any
+    repository write. Do the same for the inline mood-creation branch (when the
+    client sends mood text instead of a moodId). This avoids dragging in a full
+    @Valid + DTO chain just for two fields.
+
+Fourth Changes (Issue 3):
+    In PlaylistController.savePlaylist, added two guards:
+
+        // require title
+        String title = (String) request.get("title");
+        if (title == null || title.isBlank()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "title is required"));
+        }
+
+        // require either moodId OR a non-blank mood text
+        if (moodIdObj == null) {
+            String moodText = (String) request.get("mood");
+            if (moodText == null || moodText.isBlank()) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", "mood is required"));
+            }
+            // ... build inline Mood ...
+        }
+
+    Empty / whitespace title or mood now returns HTTP 400 with a clear
+    field-level message instead of writing junk rows. Same pattern reused in
+    the /generate handler for the mood field.
+
+
+--------------------------------------------------------------------------------
+
+5) Fifth Prompt (Issue 4 Fix — sharing a playlist you don't own):
+
+    POST /api/playlists/share currently lets ANY logged-in user share ANY playlist
+    just by passing its ID in the request body. I tested with two accounts —
+    account B was able to share account A's playlist into account C's "Shared
+    With Me" tab. I never check ownership. How do I fix this without breaking
+    Suzy's SharedPlaylistRepository contract?
+
+Fifth Output Response (Issue 4 Fix):
+    Before writing the SharedPlaylist row, resolve the sender User from the
+    Principal, look up the Playlist, and confirm playlist.user.userId ==
+    sender.userId. If not, return 403 Forbidden. This doesn't touch the
+    SharedPlaylist schema or Suzy's repository, so no coordination needed.
+
+Fifth Changes (Issue 4):
+    In PlaylistController.sharePlaylist, added an ownership guard before the
+    fan-out loop over recipientIds:
+
+        User sender = userRepository.findByUsername(principal.getName())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        int playlistId = ((Number) request.get("playlistId")).intValue();
+        Playlist playlist = playlistRepository.findById(playlistId)
+                .orElseThrow(() -> new RuntimeException("Playlist not found"));
+
+        if (playlist.getUser().getUserId() != sender.getUserId()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "You do not own this playlist"));
+        }
+
+    Also tightened GET /api/playlists/{id}: a user can read a playlist only if
+    they own it OR a SharedPlaylist row exists with them as recipient. Used
+    sharedPlaylistRepository.findByPlaylistPlaylistIdAndRecipientUserId for
+    that check, and merged the share metadata (sharedBy, sharedMessage,
+    sharedAt) into the response so PlaylistDetailPage can show the banner.
+
+
+--------------------------------------------------------------------------------
+
+6) Sixth Prompt (Issue 5 Fix — /shared swallowed by /{id}):
+
+    GET /api/playlists/shared returns 500 with NumberFormatException: For input
+    string: "shared". My controller has both:
+
+        @GetMapping("/{id}")    public ... getPlaylist(@PathVariable int id, ...)
+        @GetMapping("/shared")  public ... getSharedWithMe(...)
+
+    declared in that order. Spring MVC is matching the literal path "shared"
+    against the {id} route, trying to parse it as an int, and blowing up before
+    it ever hits getSharedWithMe. What's the right fix — change the path or
+    reorder?
+
+Sixth Output Response (Issue 5 Fix):
+    The cleanest fix is to declare the more specific (literal) route BEFORE the
+    variable {id} route. Spring MVC's RequestMappingHandlerMapping prefers the
+    most specific match, but when two routes are at the same specificity level
+    declaration order matters for how the registry walks them. Move @GetMapping
+    ("/shared") above @GetMapping("/{id}") in the source file. Don't rename the
+    endpoint — Matthew's SharedWithMePage is already calling /api/playlists/shared.
+
+Sixth Changes (Issue 5):
+    In PlaylistController.java, reordered handlers so /shared is declared BEFORE
+    /{id}, with an explicit comment so the next person doesn't undo it:
+
+        // ── GET /api/playlists/shared ─────────────────────────────────────
+        // Must be declared before /{id} so Spring MVC matches "shared" as a
+        // literal path.
+        @GetMapping("/shared")
+        public ResponseEntity<?> getSharedWithMe(Principal principal) { ... }
+
+        // ── GET /api/playlists/{id} ───────────────────────────────────────
+        @GetMapping("/{id}")
+        public ResponseEntity<?> getPlaylist(@PathVariable int id, ...) { ... }
+
+    GET /api/playlists/shared now correctly returns the recipient's shared
+    playlists, and GET /api/playlists/42 still resolves the numeric id branch.
+
+
+--------------------------------------------------------------------------------
+
+7) Seventh Prompt (Issue 6 Fix — recipient null on shared row + multi-recipient):
+
+    Suzy and I traced the empty GET /shared response. The shared_playlists rows
+    DO get written by my POST /share, but recipient_id was null on every row.
+    The frontend ShareModal also needed to support sharing to MULTIPLE friends
+    in one click (checkbox list), not one at a time. My old code was:
+
+        SharedPlaylist sp = new SharedPlaylist();
+        sp.setPlaylist(playlist);
+        sp.setSender(currentUser);
+        sp.setRecipient(req.getRecipientUserId());   // <-- a Long, not a User
+        sharedPlaylistRepository.save(sp);
+
+    SharedPlaylist.recipient is a User entity (per Suzy's model). Why is it even
+    compiling, and how do I support multiple recipients cleanly?
+
+Seventh Output Response (Issue 6 Fix):
+    Two changes:
+    1. Look up the recipient as a real User by id before assigning to
+       SharedPlaylist.recipient — never pass a raw Long; the setter that "worked"
+       was on a stale transient field, leaving the JPA association null.
+    2. Change the request shape to recipientIds: List<Integer> and loop over it,
+       creating one SharedPlaylist row per recipient. Skip (don't fail the whole
+       request on) any recipient id that doesn't resolve to a User.
+
+Seventh Changes (Issue 6):
+    Updated the request body to take a list, then loop:
+
+        List<Integer> recipientIds = (List<Integer>) request.get("recipientIds");
+        if (recipientIds == null || recipientIds.isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "recipientIds is required"));
+        }
+        String message = (String) request.get("message");
+
+        for (Object idObj : recipientIds) {
+            int recipientId = ((Number) idObj).intValue();
+            User recipient = userRepository.findById(recipientId).orElse(null);
+            if (recipient == null) continue;
+
+            SharedPlaylist sp = new SharedPlaylist();
+            sp.setPlaylist(playlist);
+            sp.setSender(sender);
+            sp.setRecipient(recipient);            // <- real User entity now
+            sp.setMessage(message);
+            sharedPlaylistRepository.save(sp);
+        }
+        return ResponseEntity.ok(Map.of("message", "Playlist shared successfully"));
+
+    After this, recipient_id is correctly populated and Suzy's
+    findByRecipientUserIdOrderBySharedAtDesc returns the expected rows on the
+    recipient's GET /shared call. ShareModal's multi-checkbox flow works
+    end-to-end across two accounts on her test fixtures.
+
+
+================================================================================
+PART B — Final Branch Integration: merging all 7 branches into dev
+================================================================================
+
+8) Eighth Prompt (the merge plan):
+
+    I am the integrator for our final submission. We have seven feature branches:
+
+      trevor/frontend-auth
+      simra/frontend-mood-playlist
+      matthew/frontend-library-social
+      sophie/backend-auth
+      wenwei/backend-mood-playlist           (mine)
+      daniel/flask-ai-service
+      sid/backend-java-flask-integration
+      suzy/backend-social-testing
+
+    I need to merge all of these into a single dev branch so we can demo the full
+    flow: register → log mood → generate playlist (Spring Boot → Flask → Gemini →
+    ytmusicapi) → save to library → share with a friend. CLAUDE.md says no direct
+    pushes to main; we PR from dev to main only at the very end.
+
+    Give me a safe merge order, the integration risks to watch for at each step,
+    and a checklist I can paste into a tracking branch (merge/all-team-branches)
+    so I can run the full integration without breaking anyone's work. I will then
+    merge each branch one at a time, fix conflicts, and run the full stack
+    locally between merges.
+
+Eighth Output Response (the merge plan):
+    Merge in dependency order — foundations first, integrations last:
+
+      1. sophie/backend-auth         (every other backend branch depends on JWT + User)
+      2. wenwei/backend-mood-playlist (my entities; Sid's service writes through them)
+      3. daniel/flask-ai-service     (independent service; merge early to test in isolation)
+      4. sid/backend-java-flask-integration  (depends on Wenwei's repos + Daniel's Flask)
+      5. suzy/backend-social-testing (depends on Wenwei's Playlist + Sophie's User)
+      6. trevor/frontend-auth        (frontend foundation: router, axios, AuthContext)
+      7. simra/frontend-mood-playlist (depends on Trevor's auth shell)
+      8. matthew/frontend-library-social (depends on Trevor + Suzy's friend endpoints)
+
+    High-risk conflict zones:
+      - PlaylistController.java (co-owned: Wenwei + Sid) — expect a merge conflict.
+      - frontend/package.json    (everyone touched it)
+      - application.properties.example / .env.example (Sophie + Daniel + Sid)
+      - frontend folder structure was reorganized mid-semester — old branches may
+        still have files at the old path.
+
+    Run the full stack between every merge: backend mvn test, flask pytest, npm
+    start, manual smoke of the full mood→playlist→share flow.
+
+Eighth Changes (the merge plan):
+    Created branch merge/all-team-branches off dev and a CHECKLIST.md inside it
+    listing every branch in the order above with a checkbox per merge step:
+    [ ] checkout, [ ] merge, [ ] resolve conflicts, [ ] mvn test, [ ] pytest,
+    [ ] npm start smoke, [ ] commit. Began executing the checklist; issues below.
+
+Issues (encountered during merge execution):
+    - PlaylistController.java had a 3-way conflict between my five endpoints and
+      Sid's /generate.
+    - Sophie committed application.properties (with her local DB password) by
+      mistake; not in .gitignore on her branch.
+    - Trevor's frontend used /src at the repo root; the rest of us moved to
+      /frontend/src. Old paths still in his branch.
+    - npm install on the merged frontend pulled the wrong axios version because
+      Matthew pinned ^1.6.0 and Trevor pinned ^1.4.0.
+    - Suzy's FriendsPage expected /api/friends/list but Matthew's UI called
+      /api/friends. The endpoint name differed across branches.
+    - JWT was read as "Authorization: Bearer ..." in Sophie's filter but the
+      Axios interceptor was sending "JWT ..." (Trevor's earlier draft).
+    - Daniel's Flask service crashed on first call because GEMINI_API_KEY was
+      not in the merged .env.example; new contributors were copying it as-is.
+    - node_modules had been committed on two branches and was bloating the
+      merged tree.
+    - Sid's /api/playlists/generate response shape didn't match what Simra's
+      PlaylistPage expected (camelCase vs snake_case from Flask).
+    - SharedPlaylist FK to Playlist broke when Suzy's branch hit my updated
+      Playlist entity — column name mismatch (playlist_id vs playlistId).
+
+
+--------------------------------------------------------------------------------
+
+9) Ninth Prompt (Issue 7 Fix — PlaylistController 3-way merge):
+
+    Merging sid/backend-java-flask-integration onto a branch that already has
+    wenwei/backend-mood-playlist gives me a conflict on PlaylistController.java.
+    Both versions have all the imports and class declaration. Sid's branch has
+    /generate plus the autowired PlaylistGenerationService; mine has /save,
+    /library, /{id}, /share, /shared. Git is showing the entire class body as a
+    conflict. How do I resolve this without losing endpoints?
+
+Ninth Output Response (Issue 7 Fix):
+    The conflict is wide because both branches edited overlapping regions
+    (imports + class header). Resolve manually rather than picking ours/theirs:
+
+    1. Take the union of imports.
+    2. Take the union of @Autowired fields (PlaylistRepository,
+       PlaylistTrackRepository, SharedPlaylistRepository, AuthService from mine;
+       PlaylistGenerationService from Sid's).
+    3. Keep all six endpoints — /generate from Sid plus my five.
+    4. Use one consistent class-level @RequestMapping("/api/playlists").
+    5. Run mvn compile after to confirm no missing symbols.
+
+Ninth Changes (Issue 7):
+    Hand-merged PlaylistController.java by opening both versions side by side.
+    Final file has:
+
+        @RestController
+        @RequestMapping("/api/playlists")
+        public class PlaylistController {
+            // shared deps
+            @Autowired private PlaylistRepository playlistRepository;
+            @Autowired private PlaylistTrackRepository playlistTrackRepository;
+            @Autowired private SharedPlaylistRepository sharedPlaylistRepository;
+            @Autowired private AuthService authService;
+            @Autowired private FriendService friendService;
+            // Sid
+            @Autowired private PlaylistGenerationService generationService;
+
+            @PostMapping("/generate") /* Sid */ ...
+            @PostMapping("/save")     /* Wenwei */ ...
+            @GetMapping("/library")   /* Wenwei */ ...
+            @GetMapping("/{id}")      /* Wenwei */ ...
+            @PostMapping("/share")    /* Wenwei */ ...
+            @GetMapping("/shared")    /* Wenwei */ ...
+        }
+
+    mvn clean test -pl backend now compiles and all tests pass.
+
+
+--------------------------------------------------------------------------------
+
+10) Tenth Prompt (Issue 8 Fix — Sophie's application.properties leak):
+
+    Sophie's branch committed backend/src/main/resources/application.properties
+    with her real local DB password and a hardcoded JWT secret. We do not want
+    that on dev or main. What is the right way to scrub this and prevent it from
+    happening again?
+
+Tenth Output Response (Issue 8 Fix):
+    Three steps:
+    1. Add application.properties to .gitignore at the backend resource path.
+    2. Keep application.properties.example as the only committed template.
+    3. Remove the file from the index but keep Sophie's local copy intact:
+       git rm --cached backend/src/main/resources/application.properties
+    4. Update the README/CLAUDE.md to say "copy .example to .properties locally."
+    5. Sophie should rotate her DB password since the old one is in git history.
+
+Tenth Changes (Issue 8):
+    .gitignore now contains:
+        backend/src/main/resources/application.properties
+        flask-service/.env
+
+    Removed both files from the index (they remain untracked locally), confirmed
+    application.properties.example and .env.example are the only committed
+    templates, and added a note in README under "Local Configuration":
+
+        Copy backend/src/main/resources/application.properties.example to
+        application.properties and fill in your local DB credentials and JWT
+        secret. Do the same for flask-service/.env.example -> .env with your
+        Gemini key.
+
+    (See commits 2eac6181 "Add backend application properties example",
+    76c5bbe9 "Add Flask environment example", 1bdbdb23 "Document local
+    configuration requirements".)
+
+
+--------------------------------------------------------------------------------
+
+11) Eleventh Prompt (Issue 9 Fix — Trevor's frontend path mismatch):
+
+    Trevor's branch still has src/App.js, src/index.js, src/pages/* at the repo
+    root. Everyone else moved to /frontend/src/* per RESPONSIBILITIES.md. When I
+    merge Trevor's branch, I get duplicates: both /src and /frontend/src exist,
+    and npm start runs the wrong one. How do I reconcile?
+
+Eleventh Output Response (Issue 9 Fix):
+    Don't try to git-mv after the merge — that creates a noisy diff and can
+    silently overwrite later changes. Instead:
+    1. Before merging, on a temp branch off Trevor's, move /src into /frontend/src
+       and commit just the rename ("reorganized file structure to frontend folder").
+    2. Then merge that temp branch — git will recognize the moves and produce a
+       clean rename diff.
+    3. After the merge, rerun npm install inside /frontend.
+    4. Delete any stray top-level /src or /public left over.
+
+Eleventh Changes (Issue 9):
+    Saw commit 834d29ff "reorganized file structure to frontend folder" in the
+    log — applied that pattern. After the rename-then-merge, only /frontend/src
+    remains. npm start from /frontend serves the merged App correctly with
+    Trevor's AuthContext + Simra's Dashboard + Matthew's Library all routable.
+
+
+--------------------------------------------------------------------------------
+
+12) Twelfth Prompt (Issue 10 Fix — axios version conflict):
+
+    npm install on the merged frontend now warns about peer dependency mismatch
+    and the JWT interceptor is silently failing on some pages. Trevor pinned
+    axios ^1.4.0, Matthew pinned ^1.6.0. package-lock has both. How do I fix?
+
+Twelfth Output Response (Issue 10 Fix):
+    Pick the newest stable axios line (1.x is backwards compatible across these
+    minors for our usage), set it once in /frontend/package.json, delete
+    /frontend/package-lock.json and node_modules, then run a clean npm install.
+    Verify the interceptor still attaches the Authorization header.
+
+Twelfth Changes (Issue 10):
+    /frontend/package.json: "axios": "^1.15.2" as the single source of truth
+    (the latest 1.x at merge time). Removed lockfile and node_modules, ran
+    npm install. Confirmed in DevTools that every /api/** request goes out
+    with "Authorization: Bearer <jwt>".
+
+
+--------------------------------------------------------------------------------
+
+13) Thirteenth Prompt (Issue 11 Fix — FriendsPage response shape mismatch):
+
+    Endpoint names actually line up between Matthew's FriendsPage and Suzy's
+    FriendController (/api/friends, /api/friends/requests, /api/friends/requests/
+    sent, /api/friends/accept/{id}, /api/friends/decline/{id}). The bug is that
+    FriendsPage was reading req.user.username and req.user.userId, but Suzy's
+    controller returns a flatter FriendshipView DTO (requestId, otherUserId,
+    otherUsername, status, ...). So all three tabs render but every name shows
+    "undefined". Whose side should change?
+
+Thirteenth Output Response (Issue 11 Fix):
+    The backend DTO is the API contract and Suzy's integration tests already
+    assert FriendshipView's exact field names. Update Matthew's FriendsPage to
+    consume the FriendshipView shape (otherUsername / otherUserId / requestId /
+    status) instead of req.user.*. Frontend-only change, no risk to Suzy's tests.
+
+Thirteenth Changes (Issue 11):
+    In frontend/src/pages/FriendsPage.js, updated every reference to use the
+    flat FriendshipView fields: list rows now read fr.otherUsername and the
+    accept/decline buttons post to /api/friends/accept/{requestId} and
+    /api/friends/decline/{requestId} using fr.requestId. Captured in commit
+    821b546e "Fix FriendsPage to match Suzy's API response structure". My
+    Friends / Received / Sent tabs all populate with real usernames now.
+
+
+--------------------------------------------------------------------------------
+
+14) Fourteenth Prompt (Issue 12 Fix — JWT header scheme mismatch):
+
+    After Trevor + Sophie are both merged, every authenticated request returns
+    401. Sophie's JwtAuthFilter parses "Authorization: Bearer <token>". Trevor's
+    early draft of axios.js prefixes the token with "JWT ". So the filter sees
+    "JWT eyJ..." and bails out before validating.
+
+Fourteenth Output Response (Issue 12 Fix):
+    "Bearer" is the standard prefix used by every Spring Security tutorial and
+    by Sophie's filter. Fix the frontend interceptor — change "JWT " to "Bearer "
+    in axios.js. One-line change. Don't touch SecurityConfig; it's correct.
+
+Fourteenth Changes (Issue 12):
+    In frontend/src/api/axios.js, the request interceptor:
+
+    Before:
+        config.headers.Authorization = `JWT ${token}`;
+
+    After:
+        config.headers.Authorization = `Bearer ${token}`;
+
+    All 401s went away. Login -> log mood -> generate -> save -> share now
+    works end-to-end against the merged backend.
+
+
+--------------------------------------------------------------------------------
+
+15) Fifteenth Prompt (Issue 13 Fix — Flask GEMINI_API_KEY missing on first run):
+
+    After merging daniel/flask-ai-service, running flask-service/app.py crashes
+    immediately:
+
+        google.generativeai.types.generation_types.BlockedPromptException
+        ... or sometimes ...
+        ValueError: GEMINI_API_KEY environment variable not set
+
+    Daniel's branch has .env locally but it isn't committed (correctly), and
+    .env.example doesn't list GEMINI_API_KEY at all. How do I make it obvious
+    to a new dev that they need to set it?
+
+Fifteenth Output Response (Issue 13 Fix):
+    Two changes:
+    1. Update flask-service/.env.example to list every required variable with a
+       placeholder, including GEMINI_API_KEY=your-gemini-key-here.
+    2. In app.py, on startup, validate that os.environ["GEMINI_API_KEY"] exists
+       and fail fast with a clear message ("Set GEMINI_API_KEY in flask-service/.env
+       — see .env.example") instead of crashing deep in the SDK call.
+    3. Update README's Setup section to mention this step.
+
+Fifteenth Changes (Issue 13):
+    flask-service/.env.example now contains:
+
+        # Required: get from https://ai.google.dev/
+        GEMINI_API_KEY=your-gemini-key-here
+        FLASK_ENV=development
+        FLASK_PORT=5001
+
+    app.py at boot:
+
+        gemini_key = os.environ.get("GEMINI_API_KEY")
+        if not gemini_key:
+            raise RuntimeError(
+                "GEMINI_API_KEY is not set. Copy flask-service/.env.example to "
+                "flask-service/.env and fill in your key."
+            )
+        genai.configure(api_key=gemini_key)
+
+    README updated. (Commit 76c5bbe9 captures this.)
+
+
+--------------------------------------------------------------------------------
+
+16) Sixteenth Prompt (Issue 14 Fix — node_modules in tree):
+
+    git status shows thousands of files under frontend/node_modules being
+    tracked. Two earlier commits added them by accident. Repo is bloated
+    (~150MB clone). What's the safe cleanup?
+
+Sixteenth Output Response (Issue 14 Fix):
+    Add /frontend/node_modules and /node_modules to .gitignore (if not already),
+    then untrack with `git rm -r --cached frontend/node_modules` and commit. This
+    only removes them from the index, not from anyone's working tree. To shrink
+    the actual repo size we'd need a history rewrite (git filter-repo) — but for
+    a course final, leaving the bloat in history and just untracking going
+    forward is acceptable. Don't rewrite history before submission.
+
+Sixteenth Changes (Issue 14):
+    .gitignore already had node_modules but the existing tracked files were
+    sticky. Ran:
+
+        git rm -r --cached frontend/node_modules
+        git commit -m "Untrack node_modules (was committed by mistake)"
+
+    Matches commits 5fe0534a and 82724152 in the log. Repo stays the same size
+    in history but new clones get a clean working tree after the next install.
+
+
+--------------------------------------------------------------------------------
+
+17) Seventeenth Prompt (Issue 15 Fix — Flask response shape vs Simra's UI):
+
+    End-to-end test: log mood -> POST /api/playlists/generate -> Sid's service
+    calls Flask -> Flask returns a track list. The frontend PlaylistPage shows
+    "undefined - undefined" for every track. Looking at the network tab, Flask
+    returns:
+
+        [{"track_name": "...", "artist_name": "...", "youtube_music_url": "..."}]
+
+    Simra's PlaylistPage reads track.trackName, track.artistName, track.youtubeMusicUrl.
+    Sid's FlaskClientService passes the Flask response straight through.
+
+Seventeenth Output Response (Issue 15 Fix):
+    The Flask team uses snake_case (Pythonic), the Java/JS team uses camelCase.
+    Convert at the Java boundary in FlaskClientService — that's the cleanest
+    seam. Don't touch Daniel's Flask code (he owns it) and don't touch Simra's
+    PlaylistPage (she's already aligned with the rest of camelCase).
+
+Seventeenth Changes (Issue 15):
+    Coordinated with Sid; the fix went into FlaskClientService.parseTracks,
+    mapping snake_case JSON keys to the camelCase fields on the Track DTO before
+    returning them to PlaylistGenerationService. Also wired this so
+    JsonFileSaveService writes the camelCase form to playlists/*.json so my
+    persistence layer can read those JSON dumps later if needed.
+
+    After this change, PlaylistPage renders all 15–20 tracks with title, artist,
+    and a working YouTube Music link. Captured in commit 4465eed3 "Fix playlist
+    generation and sharing flow".
+
+
+--------------------------------------------------------------------------------
+
+18) Eighteenth Prompt (Issue 16 Fix — SharedPlaylist FK column name):
+
+    After merging suzy/backend-social-testing, Hibernate fails to start:
+
+        org.hibernate.tool.schema.spi.SchemaManagementException:
+        Schema-validation: missing column [playlist_id] in table [shared_playlists]
+
+    Suzy's SharedPlaylist entity used @JoinColumn(name = "playlistId") (camelCase)
+    while my Playlist's PK column is playlist_id (snake_case, per the rest of
+    the schema). MySQL is strict about this.
+
+Eighteenth Output Response (Issue 16 Fix):
+    Standardize on snake_case at the SQL layer (it's what the schema in CLAUDE.md
+    implies and what Sophie's User table uses). Update SharedPlaylist's
+    @JoinColumn to name = "playlist_id". This is a one-line fix in Suzy's file
+    — coordinate with her before pushing per the responsibilities rule.
+
+Eighteenth Changes (Issue 16):
+    Coordinated with Suzy on Slack; she was fine with the change since it
+    matches the rest of the schema. In SharedPlaylist.java:
+
+    Before:
+        @ManyToOne
+        @JoinColumn(name = "playlistId")
+        private Playlist playlist;
+
+    After:
+        @ManyToOne(fetch = FetchType.LAZY, optional = false)
+        @JoinColumn(name = "playlist_id", nullable = false)
+        private Playlist playlist;
+
+    Same fix applied to sender_id and recipient_id with
+    @ManyToOne(fetch=LAZY, optional=false). Also updated the repository
+    method to findByRecipientUserIdOrderBySharedAtDesc (and added
+    findByPlaylistPlaylistIdAndRecipientUserId for the GET /{id} access
+    check) so derived queries traverse recipient.userId through the
+    association. Hibernate boots cleanly. (Commit 31957645 "Fix shared
+    playlist repository integration".)
+
+
+================================================================================
+REFLECTION
+================================================================================
+
+Most useful AI assistance:
+    - Catching the LazyInitializationException root cause (return a built Map,
+      not the JPA entity) instead of the easy-but-wrong "switch to EAGER" fix.
+    - The merge-order plan in Part B — ordering Sophie -> me -> Daniel -> Sid
+      ahead of the frontend branches saved a lot of churn.
+    - Flagging the JWT prefix mismatch ("JWT " vs "Bearer ") quickly when every
+      authenticated request started returning 401 after the first big merge.
+    - Spotting that @GetMapping("/{id}") was swallowing /shared at runtime —
+      a route-ordering bug that compiled fine and only blew up under traffic.
+
+Challenges I solved with AI help:
+    - Hand-resolving the PlaylistController.java 3-way conflict between my
+      five endpoints and Sid's /generate without losing either side.
+    - Standardizing the snake_case vs camelCase boundary at FlaskClientService
+      so Daniel's Flask service and Simra's React page didn't have to change.
+    - Multi-recipient sharing: switching the request body from a single
+      recipientUserId to a recipientIds list and getting the User-entity-vs-Long
+      bug fixed at the same time.
+
+What I would do differently:
+    - Lock the API contract (endpoint paths, request/response shapes including
+      DTO field names like FriendshipView.otherUsername) on day one. The
+      response-shape drift on FriendsPage and the snake_case vs camelCase split
+      from Flask were both contract drift that we paid for at merge time.
+    - Add /frontend/node_modules and application.properties to .gitignore on the
+      very first commit instead of cleaning them up later.
+    - Keep a running CHECKLIST.md inside merge/all-team-branches from week one
+      (not just at integration time) so anyone can see what depends on what.
+
+Key concepts learned:
+    - JPA fetch strategies and the response-shape boundary between persistence
+      and HTTP — even a Map<String, Object> response wins over leaking entities.
+    - Spring MVC route resolution: literal paths must precede @PathVariable
+      paths when they overlap.
+    - Multi-branch git integration: dependency-ordered merging, conflict
+      resolution on co-owned files, and the "rename first, merge second" trick
+      for path reorganizations.
+    - End-to-end auth: the JWT path from AuthContext -> axios interceptor ->
+      JwtAuthFilter -> SecurityContextHolder -> Principal in my controllers.
+
+Time spent: ~22 hours (8 on Part A, 14 on Part B integration)
+AI tools used: Claude Code

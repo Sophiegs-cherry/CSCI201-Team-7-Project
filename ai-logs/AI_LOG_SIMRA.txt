@@ -1,0 +1,405 @@
+================================================================================
+AI-Assisted Development Log
+MoodTunes - CSCI 201 - Spring 2026
+Student Name: Simra Zargar
+Date: April 26 - May 1, 2026
+================================================================================
+
+================================================================================
+SESSION 1: Initial Component Design and File Structure
+================================================================================
+
+PROMPT 1:
+"I'm Simra and this is my responsibility for my group project. I need the code 
+and nice UI. My role is Mood + Playlist UI frontend — I own the dashboard mood 
+input page, example mood tags, optional preference/context inputs, generated 
+playlist display page, and save-to-library button flow."
+
+AI RESPONSE SUMMARY:
+- Created two React component files: MoodDashboard.jsx and PlaylistDisplay.jsx
+- MoodDashboard includes 8 mood buttons (Happy, Calm, Energetic, Sad, Romantic, 
+  Angry, Anxious, Focused) each with unique color, emoji, and hover effects
+- Genre chip selector allows up to 3 genre preferences to be selected
+- Optional context/journal textarea with 500 character limit and live counter
+- Generate Playlist button calls POST /api/moods/log then POST /api/playlists/generate
+- PlaylistDisplay shows track list with album art, save button, and success banner
+- Both components use React Router's useNavigate and useLocation for navigation
+- JWT token retrieved from localStorage and passed in Authorization header
+
+WHAT I LEARNED:
+- How to pass data between React pages using navigate state (location.state)
+- How to use inline styles in React instead of CSS files
+- How to chain two API calls sequentially — log mood first, get moodId, then generate
+- React useState hook for managing selected mood, genres, loading, error states
+
+CODE SNIPPET USED:
+```javascript
+// Chain two API calls - log mood first, then generate playlist
+const moodResponse = await axios.post("/api/moods/log",
+  { moodText, musicPreferences, contextNote },
+  { headers: { Authorization: `Bearer ${token}` } }
+);
+const moodId = moodResponse.data.moodId;
+
+const playlistResponse = await axios.post("/api/playlists/generate",
+  { moodId },
+  { headers: { Authorization: `Bearer ${token}` } }
+);
+
+navigate("/playlist", {
+  state: {
+    playlist: playlistResponse.data,
+    moodId,
+    moodLabel: selectedMood.label,
+    moodColor: selectedMood.color,
+    moodEmoji: selectedMood.emoji,
+    contextNote,
+  },
+});
+```
+
+ISSUES ENCOUNTERED:
+- Initially called POST /api/moods/log with moodCategory field, which was wrong
+
+HOW I FIXED IT:
+- Read Wenwei's API documentation (API_WENWEI.md) and updated to use moodText 
+  as a free-text string, e.g. "I'm feeling happy, and I enjoy Pop, Indie"
+- Added musicPreferences as a separate comma-separated field
+
+--------------------------------------------------------------------------------
+
+PROMPT 2:
+"Can you make another version (with the same requirements and everything) that 
+looks more sleek — here's the inspiration [Dribbble music app screenshots]"
+
+AI RESPONSE SUMMARY:
+- Redesigned both pages with a dark theme (#0d0d14 background)
+- Each mood button glows in its own accent color when selected
+- Genre chips redesigned as white pills with black text for visibility
+- Playlist header card has a soft color glow effect behind it
+- Track list uses dark cards with subtle borders
+- Save button uses the mood's accent color as its border and text color
+- Added a purple dot accent next to the MoodTunes brand name in navbar
+
+WHAT I LEARNED:
+- Dark UI design requires much higher contrast ratios than light UI
+- CSS box-shadow with low opacity creates a subtle glow effect
+- rgba() color values allow transparency control for borders and backgrounds
+- Inline style objects in React can use template literals for dynamic colors
+
+CODE SNIPPET USED:
+```javascript
+// Dynamic mood button styling based on selection state
+style={{
+  background: isSelected ? "#0d0d14" : "#16161f",
+  border: `1.5px solid ${isSelected ? mood.color : "#2a2a3a"}`,
+  boxShadow: isSelected ? `0 0 18px ${mood.color}44` : "none",
+  transform: isSelected ? "translateY(-3px)" : "none",
+}}
+
+// Playlist header glow effect
+glow: {
+  position: "absolute", top: -60, right: -60,
+  width: 200, height: 200, borderRadius: "50%",
+  opacity: 0.15, filter: "blur(60px)", pointerEvents: "none"
+}
+```
+
+ISSUES ENCOUNTERED:
+- The dark theme looked correct in the chat preview but rendered incorrectly 
+  in the browser — genre chips appeared nearly invisible (dark text on dark bg)
+
+HOW I FIXED IT:
+- Changed genre chips to solid white background (#ffffff) with black text (#111)
+- Increased border opacity on all interactive elements for better visibility
+- Raised text color values from rgba(255,255,255,0.4) to rgba(255,255,255,0.8)
+
+--------------------------------------------------------------------------------
+
+================================================================================
+SESSION 2: Setting Up the React Project
+================================================================================
+
+PROMPT 3:
+"I cloned the repo in my VS Code and made my branch — what do I do now?"
+
+AI RESPONSE SUMMARY:
+- Explained the VS Code workflow: confirm branch with git branch command
+- Showed how to navigate to the correct project folder
+- Explained where to place .jsx files in the src/pages/ folder
+- Provided the App.js routing configuration using React Router v6
+- Explained npm install and npm start commands
+
+WHAT I LEARNED:
+- git branch shows current branch with * indicating active branch
+- React Router v6 uses <Routes> and <Route> instead of older <Switch>
+- npm start must be run from inside the frontend/ folder where package.json is
+- VS Code terminal can be opened with Ctrl+` shortcut
+
+CODE SNIPPET USED:
+```javascript
+// App.js routing setup
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import DashboardPage from "./pages/DashboardPage";
+import PlaylistPage from "./pages/PlaylistPage";
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<DashboardPage />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/playlist" element={<PlaylistPage />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+```
+
+ISSUES ENCOUNTERED:
+- Running npm start from the wrong directory (project root instead of frontend/)
+  caused "Could not read package.json" error
+
+HOW I FIXED IT:
+- cd into the frontend/ directory first before running npm start
+- Verified correct directory by checking that package.json exists with ls command
+
+--------------------------------------------------------------------------------
+
+PROMPT 4:
+"It's giving me: Module not found: Can't resolve 'react-router-dom'"
+
+AI RESPONSE SUMMARY:
+- The react-router-dom package was not installed in the project
+- Need to run npm install to add missing dependencies
+- Also need axios for HTTP requests
+
+WHAT I LEARNED:
+- React packages must be explicitly installed even if imported in code
+- npm install react-router-dom axios adds both packages at once
+- node_modules folder is not committed to git — must install on each machine
+
+CODE SNIPPET USED:
+```bash
+cd ~/CSCI201-Team-7-Project/frontend
+npm install react-router-dom axios
+npm start
+```
+
+ISSUES ENCOUNTERED:
+- File was named Dashboard.js but App.js was importing DashboardPage — names 
+  didn't match so React couldn't find the component
+
+HOW I FIXED IT:
+```bash
+mv src/pages/Dashboard.js src/pages/DashboardPage.js
+```
+
+--------------------------------------------------------------------------------
+
+================================================================================
+SESSION 3: Interactive Preview and UI Testing
+================================================================================
+
+PROMPT 5:
+"Can you run this code anywhere else to see how it looks first?"
+
+AI RESPONSE SUMMARY:
+- Built a fully interactive HTML/JavaScript mockup rendered directly in chat
+- Mockup included all 8 mood buttons with real color interactions
+- Genre chip selection with 3-chip maximum enforcement
+- Context note textarea with character counter
+- Mock playlist generation using pre-defined track lists for each mood
+- Save to Library flow with success state
+- Library page showing saved playlists as mood-colored cards
+- Navigation between Dashboard, Playlist, and Library pages
+
+WHAT I LEARNED:
+- Can prototype and test UI in a browser-based preview before writing React code
+- Interactive mockups help identify layout and contrast issues early
+- The chat preview can render differently than a real browser for dark themes
+
+CODE SNIPPET USED:
+```javascript
+// Mock playlist data for testing without backend
+const MOCK_TRACKS = {
+  happy: ["Walking on Sunshine – Katrina & The Waves", "Happy – Pharrell Williams", ...],
+  calm: ["Weightless – Marconi Union", "Clair de Lune – Debussy", ...],
+  energetic: ["Blinding Lights – The Weeknd", "HUMBLE. – Kendrick Lamar", ...],
+  // ... all 8 moods
+};
+
+function generatePlaylist() {
+  const tracks = MOCK_TRACKS[selectedMood.key].map((t, i) => ({
+    trackName: t.split(' – ')[0],
+    artistName: t.split(' – ')[1] || '',
+  }));
+  currentPlaylist = { title: selectedMood.label + ' Vibes', tracks };
+  showPage('playlist');
+}
+```
+
+ISSUES ENCOUNTERED:
+- After changing textarea to 2 rows, user preferred the original 4-row version
+
+HOW I FIXED IT:
+- Restored original textarea with rows={4} and resize: "vertical" property
+- Kept the resizable behavior so users can expand if needed
+
+--------------------------------------------------------------------------------
+
+================================================================================
+SESSION 4: API Integration with Wenwei's Backend
+================================================================================
+
+PROMPT 6:
+"Wait, for the existing code you need to add in Wenwei's API"
+
+AI RESPONSE SUMMARY:
+- Read the API_WENWEI.md documentation file carefully
+- Identified key differences from initial assumptions:
+  - POST /api/moods/log uses moodText (free text string) not moodCategory
+  - musicPreferences is a separate field, not part of moodText
+  - POST /api/playlists/save requires title, moodId, AND full tracks array
+  - Each track needs trackName, artistName, youtubeMusicUrl, trackOrder
+  - Save returns 201 Created (not 200 OK)
+- Updated DashboardPage to construct moodText as natural language sentence
+- Updated PlaylistPage save call to include all required track fields
+- Added YouTube Music link (▶) button for each track if URL is available
+
+WHAT I LEARNED:
+- Always read the actual API documentation before writing API calls
+- Backend field names may differ from what seems intuitive
+- The moodId returned from step 1 must be passed to step 2 and step 3
+- Playlist save needs the full track data, not just a playlistId
+
+CODE SNIPPET USED:
+```javascript
+// Wenwei's POST /api/moods/log — uses natural language moodText
+const moodText = `I'm feeling ${selectedMood.label.toLowerCase()}${
+  selectedGenres.length > 0 ? `, and I enjoy ${selectedGenres.join(", ")}` : ""
+}`;
+
+// Wenwei's POST /api/playlists/save — full track objects required
+await axios.post("/api/playlists/save", {
+  title: playlist.title || `${moodLabel} Vibes`,
+  moodId,
+  tracks: tracks.map((t, i) => ({
+    trackName: t.trackName,
+    artistName: t.artistName,
+    youtubeMusicUrl: t.youtubeMusicUrl || "",
+    trackOrder: t.trackOrder || i + 1,
+  })),
+}, { headers: { Authorization: `Bearer ${token}` } });
+```
+
+ISSUES ENCOUNTERED:
+- Initial implementation sent moodCategory instead of moodText to the mood log 
+  endpoint, which would have caused a 400 error from the backend
+
+HOW I FIXED IT:
+- Updated field names to match Wenwei's API spec exactly
+- Constructed moodText as a human-readable sentence combining mood and genres
+- Made contextNote optional by sending undefined instead of empty string
+
+--------------------------------------------------------------------------------
+
+================================================================================
+SESSION 5: Navbar Integration
+================================================================================
+
+PROMPT 7:
+"You have the playlist and dashboard .js files right? Can you make sure they 
+have this navbar at the top [screenshot of navbar design]"
+
+AI RESPONSE SUMMARY:
+- Built a Navbar component directly inside both DashboardPage.js and PlaylistPage.js
+- Navbar matches the design: purple dot, MoodTunes brand, right-aligned nav links
+- Active page link appears white/bold, inactive links are dimmed
+- Links navigate to /dashboard, /library, /friends, /history routes
+- Logout option included as a non-navigating link placeholder
+
+WHAT I LEARNED:
+- In React, components can be defined in the same file and used locally
+- The active prop pattern highlights the current page in the navbar
+- onClick on a span element works the same as on a button for navigation
+
+CODE SNIPPET USED:
+```javascript
+function Navbar({ active }) {
+  const navigate = useNavigate();
+  return (
+    <nav style={nav.bar}>
+      <span style={nav.brand} onClick={() => navigate("/dashboard")}>
+        <span style={nav.dot} />
+        MoodTunes
+      </span>
+      <div style={nav.links}>
+        {["Dashboard","Library","Friends","History"].map((l) => (
+          <span
+            key={l}
+            onClick={() => navigate("/" + l.toLowerCase())}
+            style={{
+              ...nav.link,
+              color: active === l ? "#fff" : "rgba(255,255,255,0.4)",
+              fontWeight: active === l ? 700 : 500,
+            }}
+          >
+            {l}
+          </span>
+        ))}
+        <span style={{ ...nav.link, color: "rgba(255,255,255,0.4)" }}>Logout</span>
+      </div>
+    </nav>
+  );
+}
+```
+
+ISSUES ENCOUNTERED:
+- Navbar was not appearing on the page even though the code was in the file
+- Debugging revealed the return statement was missing the "return" keyword — 
+  the JSX was just a floating expression with no return statement
+
+HOW I FIXED IT:
+- Found the missing return keyword in the DashboardPage return statement
+- Changed bare `(` to `return (` on the correct line
+- Browser hot-reloaded and navbar appeared immediately after saving
+
+--------------------------------------------------------------------------------
+
+================================================================================
+REFLECTION
+================================================================================
+
+Most useful AI assistance:
+- Generating complete, working React component code with proper API integration
+- Debugging the missing "return" keyword that prevented the navbar from rendering
+- Explaining the difference between Wenwei's actual API fields vs. assumed fields
+- Walking through the git workflow step by step for committing and pushing code
+- Building an interactive mockup to test UI before setting up the full environment
+
+Challenges I solved with AI help:
+- Dark theme contrast issues — genre chips invisible on dark background
+- Chaining two API calls sequentially (mood log → playlist generate)
+- Passing data between React pages using navigation state
+- Setting up React Router and installing missing npm packages
+- Identifying that the file was named Dashboard.js but imported as DashboardPage
+
+What I would do differently:
+- Read the API documentation before writing any API calls
+- Test UI in a real browser earlier instead of relying on chat preview
+- Set up the folder structure and npm packages before writing component code
+- Communicate with teammates sooner about file naming conventions
+
+Key concepts learned:
+- React component architecture with hooks (useState, useNavigate, useLocation)
+- Dark UI design principles and contrast requirements
+- JWT authentication flow — retrieving token from localStorage and passing in headers
+- Chaining asynchronous API calls with async/await
+- React Router v6 navigation and state passing between routes
+- Git branch workflow for collaborative team development
+- npm package management and dependency installation
+
+Time spent: ~6 hours across multiple sessions (April 26 - May 1, 2026)
+AI tools used: Claude (Anthropic) — Claude Sonnet via claude.ai
+================================================================================
