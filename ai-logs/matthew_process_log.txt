@@ -1,0 +1,283 @@
+# AI-Assisted Development Log
+# MoodTunes - CSCI 201 Final Project
+# Student Name: Matthew Kwok
+# Date: May 1, 2026
+
+================================================================================
+SESSION 1: React Frontend Setup and Page Structure
+================================================================================
+
+PROMPT 1:
+"I need to build a React frontend for a mood-based playlist app. I need pages
+for a playlist library, playlist detail view, friends management, shared
+playlists, and a share modal. How should I structure this?"
+
+AI RESPONSE SUMMARY:
+- Create separate .js and .css files for each page component
+- Use React Router for navigation between pages
+- Use useState and useEffect hooks for state and API calls
+- Export each component as default export
+
+WHAT I LEARNED:
+- React components are just JavaScript functions that return JSX
+- CSS files can be imported directly into JS component files
+- React Router's useNavigate and useParams hooks handle navigation and URL params
+
+CODE SNIPPET USED:
+```jsx
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+
+function PlaylistDetailPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [playlist, setPlaylist] = useState(null);
+}
+```
+
+--------------------------------------------------------------------------------
+
+PROMPT 2:
+"How do I set up axios to automatically attach JWT tokens to every request?"
+
+AI RESPONSE SUMMARY:
+- Create axios instance with axios.create()
+- Use interceptors to add Authorization header before each request
+- Store token in localStorage or sessionStorage
+- All API calls use this instance instead of raw axios
+
+WHAT I LEARNED:
+- Axios interceptors run before every request automatically
+- Centralizing auth logic means you only write it once
+- baseURL in axios.create() sets the default server URL
+
+CODE SNIPPET USED:
+```javascript
+const api = axios.create({
+  baseURL: "http://localhost:8080",
+});
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+```
+
+================================================================================
+SESSION 2: API Integration and State Management
+================================================================================
+
+PROMPT 3:
+"How do I replace mock data with real API calls in my React components
+and handle loading and error states?"
+
+AI RESPONSE SUMMARY:
+- Use useEffect hook to fetch data when component mounts
+- Store data in useState, initialize as empty array or null
+- Add separate loading and error states
+- Handle errors in .catch() block
+
+WHAT I LEARNED:
+- useEffect with empty dependency array [] runs once on mount
+- Always handle loading and error states for better UX
+- API calls are asynchronous so data won't be available immediately
+
+CODE SNIPPET USED:
+```jsx
+const [playlists, setPlaylists] = useState([]);
+const [loading, setLoading] = useState(true);
+const [error, setError] = useState('');
+
+useEffect(() => {
+  api.get('/api/playlists/library')
+    .then(res => {
+      setPlaylists(res.data);
+      setLoading(false);
+    })
+    .catch(() => {
+      setError('Could not load your library. Please try again.');
+      setLoading(false);
+    });
+}, []);
+```
+
+ISSUES ENCOUNTERED:
+- Mock data field names didn't match backend API response fields
+
+HOW I FIXED IT:
+- Compared backend controller response structure with frontend field access
+- Changed songCount vs trackCount, and mood object vs mood string
+- Used optional chaining (?) for nested fields like friend.user?.username
+
+--------------------------------------------------------------------------------
+
+PROMPT 4:
+"How do I build a friends page with tabs for My Friends, Received Requests,
+and Sent Requests?"
+
+AI RESPONSE SUMMARY:
+- Use useState to track which tab is active
+- Conditionally render content based on active tab
+- Fetch from separate endpoints for each tab
+- Use Promise.all() to fetch multiple endpoints simultaneously
+
+WHAT I LEARNED:
+- Conditional rendering with {activeTab === 'friends' && <div>...</div>}
+- Promise.all() runs multiple API calls in parallel
+- Tab UI is just buttons that update a state variable
+
+CODE SNIPPET USED:
+```jsx
+const [activeTab, setActiveTab] = useState('friends');
+
+useEffect(() => {
+  Promise.all([
+    api.get('/api/friends'),
+    api.get('/api/friends/requests'),
+    api.get('/api/friends/requests/sent'),
+  ]).then(([friendsRes, receivedRes, sentRes]) => {
+    setFriends(friendsRes.data);
+    setReceived(receivedRes.data);
+    setSent(sentRes.data);
+  });
+}, []);
+```
+
+================================================================================
+SESSION 3: Share Modal and Social Features
+================================================================================
+
+PROMPT 5:
+"How do I build a modal overlay that lets users select friends with checkboxes
+and send a playlist share?"
+
+AI RESPONSE SUMMARY:
+- Modal overlay uses position: fixed covering the full screen
+- Click on overlay background closes modal, stopPropagation on card prevents closing
+- Use array state to track selected friend IDs
+- Toggle selection by adding/removing from array
+
+WHAT I LEARNED:
+- e.stopPropagation() prevents click events from bubbling to parent
+- Array state for multi-select: filter to remove, spread to add
+- Show confirmation state after successful send
+
+CODE SNIPPET USED:
+```jsx
+function toggleFriend(userId) {
+  setSelected(prev =>
+    prev.includes(userId)
+      ? prev.filter(id => id !== userId)
+      : [...prev, userId]
+  );
+}
+```
+
+ISSUES ENCOUNTERED:
+- Share button was not disabled when no friends selected
+- Modal was closing when clicking inside the card
+
+HOW I FIXED IT:
+- Added CSS class btn-send-disabled and checked selected.length === 0
+- Added onClick={e => e.stopPropagation()} to modal card div
+
+================================================================================
+SESSION 4: Styling and Dark Theme
+================================================================================
+
+PROMPT 6:
+"How do I match my pages to my teammate's dark theme using CSS?"
+
+AI RESPONSE SUMMARY:
+- Match background colors: #0d0d14 for page, #16161f for cards
+- Use border: 1.5px solid #2a2a3a for subtle card borders
+- Match accent colors from teammate's mood color palette
+- Use border-radius: 16px for rounded cards
+- Add hover transitions with transform: translateY(-3px)
+
+WHAT I LEARNED:
+- Consistent color variables make theming easier across components
+- Subtle box-shadow on hover adds depth without being distracting
+- CSS transition: all 0.2s makes hover effects smooth
+
+CODE SNIPPET USED:
+```css
+.playlist-card {
+  background: #16161f;
+  border: 1.5px solid #2a2a3a;
+  border-radius: 16px;
+  transition: all 0.2s;
+}
+.playlist-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+```
+
+================================================================================
+SESSION 5: Git and Project Collaboration
+================================================================================
+
+PROMPT 7:
+"How do I push my frontend code to a specific branch on a shared GitHub repo
+without affecting other teammates' branches?"
+
+AI RESPONSE SUMMARY:
+- Use git checkout -b to create and switch to new branch
+- Always push to your own branch with git push origin branch-name
+- Never push directly to main
+- Use git fetch and git pull to get teammates' changes
+
+WHAT I LEARNED:
+- Each teammate works on their own branch to avoid conflicts
+- Force push (--force) needed when rewriting branch history
+- Git merge --abort cancels a merge with conflicts
+
+CODE SNIPPET USED:
+```bash
+git checkout -b matthew/frontend-library-social
+git add .
+git commit -m "Add library and social UI pages"
+git push origin matthew/frontend-library-social
+```
+
+ISSUES ENCOUNTERED:
+- Accidentally created embedded git repository (submodule) inside project folder
+- node_modules folder was being tracked by git
+
+HOW I FIXED IT:
+- Removed embedded .git folder with Remove-Item -Recurse -Force
+- Added node_modules/ to .gitignore and ran git rm -r --cached
+
+================================================================================
+REFLECTION
+================================================================================
+
+Most useful AI assistance:
+- Setting up axios interceptors for automatic JWT auth headers
+- Understanding React hooks (useState, useEffect, useParams)
+- Matching backend API response field names to frontend field access
+- Building the tab UI and multi-select modal pattern
+
+Challenges I solved with AI help:
+- Replacing mock data with real API calls across 5 components
+- Coordinating field names with backend teammates (Wenwei and Suzy)
+- Setting up dark theme CSS to match teammate's design style
+- Resolving Git issues with embedded repositories and node_modules tracking
+
+What I would do differently:
+- Agree on API response field names with backend teammates before writing frontend
+- Set up the shared repo structure before starting local development
+- Use a shared CSS variables file for colors instead of hardcoding in each component
+
+Key concepts learned:
+- React component-based architecture and hooks
+- Axios interceptors for centralized authentication
+- JWT-based authentication flow in a full-stack app
+- Git branching and collaboration workflow
+- CORS and proxy configuration for local development
+
+Time spent: ~20 hours
+AI tools used: Claude/Gemini
