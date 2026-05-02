@@ -44,6 +44,9 @@ public class PlaylistController {
     @Autowired
     private SharedPlaylistRepository sharedPlaylistRepository;
 
+    @Autowired
+    private FriendshipRepository friendshipRepository;
+
     public static class GenerateRequest {
         private String mood;
         private String musicPreferences;
@@ -264,6 +267,11 @@ public class PlaylistController {
             int recipientId = ((Number) idObj).intValue();
             User recipient = userRepository.findById(recipientId).orElse(null);
             if (recipient == null) continue;
+
+            Optional<Friendship> friendship = friendshipRepository.findBetween(sender.getUserId(), recipientId);
+            if (friendship.isEmpty() || friendship.get().getStatus() != Friendship.Status.ACCEPTED) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Can only share with friends"));
+            }
 
             SharedPlaylist sp = new SharedPlaylist();
             sp.setPlaylist(playlist);

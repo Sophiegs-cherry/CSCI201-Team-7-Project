@@ -1,0 +1,253 @@
+================================================================
+process_log.txt
+Sid Goyal — sid/backend-java-flask-integration
+MoodTunes (CSCI 201 Team 7)
+================================================================
+
+This log covers my work on the Java->Flask integration layer:
+FlaskConfig, FlaskClientService, JsonFileSaveService,
+PlaylistGenerationService, and the /generate method in the shared
+PlaylistController. Entries are roughly in the order I worked
+through them.
+
+
+----------------------------------------------------------------
+ENTRY 1 — Picking RestTemplate vs WebClient
+----------------------------------------------------------------
+
+Prompt:
+"I need to call a local Flask service from Spring Boot. The Flask
+endpoint takes JSON in and returns a JSON array of tracks. Should I
+use RestTemplate or WebClient? Our project is Spring Boot 3.2 and
+the rest of the backend is synchronous (JPA, Spring Security with
+JWT). Just one outgoing call per user request."
+
+Issues:
+The AI initially suggested WebClient because "it's the modern
+choice." That would have been fine in isolation, but our whole
+stack is synchronous request->response and nobody else on the team
+is using reactive code. Pulling in WebFlux types just for one call
+would have made the service awkward to test and inconsistent with
+the rest of the backend.
+
+Fix:
+Stuck with RestTemplate. Set up a dedicated bean in FlaskConfig
+(named "flaskRestTemplate") so it doesn't collide with anything
+anyone else might add later, and configured connect/read timeouts
+through RestTemplateBuilder.
+
+Explanation:
+Consistency across a team codebase matters more than picking the
+"newest" API. RestTemplate is still fully supported in Spring 6
+and fits a synchronous Spring MVC controller cleanly. A named bean
+prevents future autowiring conflicts if someone else adds a generic
+RestTemplate for a different purpose.
+
+
+----------------------------------------------------------------
+ENTRY 2 — Where the JSON file write should live
+----------------------------------------------------------------
+
+Prompt:
+"My responsibilities include writing a JSON snapshot of every
+generated playlist to a /playlists folder. Should this code go in
+the controller, in the service that calls Flask, or somewhere else?
+The DB save also has to happen — I don't want to do all three in
+one giant method."
+
+Issues:
+The first response put the file write inside the same service that
+calls Flask, right after parsing the response. That couples the
+HTTP client to the filesystem, which felt wrong — the client should
+only know how to talk to Flask. It also meant the file would be
+written even if the DB save later failed, leaving orphaned JSON
+files.
+
+Fix:
+Split into three classes:
+  - FlaskClientService: only does the HTTP call
+  - JsonFileSaveService: only writes the file
+  - PlaylistGenerationService: orchestrates everything (Flask call,
+    DB save, then JSON write at the end)
+The orchestrator owns the order. JSON write happens last so we
+don't write a file for a request that ultimately failed.
+
+Explanation:
+Single-responsibility makes each class easier to test and reason
+about. The orchestrator pattern also means the controller stays
+thin — it just calls one service method and maps exceptions to
+status codes. Writing the JSON last keeps the filesystem aligned
+with what's actually in the database.
+
+
+----------------------------------------------------------------
+ENTRY 3 — Returning 503 when Flask is down
+----------------------------------------------------------------
+
+Prompt:
+"What exception does RestTemplate throw when the target server is
+not running? I need to return HTTP 503 to the frontend if Flask is
+down or times out, but a different status if Flask returns a 4xx
+error."
+
+Issues:
+The AI told me RestTemplate throws RestClientException for
+"everything," which technically is true but useless — I'd have no
+way to distinguish a connection failure from a 400 response from
+Flask. I had to dig into the actual exception hierarchy myself.
+
+Fix:
+Caught three specific exceptions in FlaskClientService:
+  - ResourceAccessException -> connection refused / timeout
+    -> wrap in custom FlaskUnavailableException
+  - HttpServerErrorException -> Flask returned 5xx
+    -> also wrap in FlaskUnavailableException
+  - HttpClientErrorException -> Flask returned 4xx (e.g. empty mood)
+    -> let it propagate so the controller can return 400
+The controller catches FlaskUnavailableException and returns 503,
+catches HttpClientErrorException and returns 400.
+
+Explanation:
+HTTP status codes are part of the API contract with the frontend.
+Trevor's axios interceptor and the React error states care about
+the difference between "service is down, try again later" (503) and
+"your input is invalid" (400). Catching the right exception at the
+right layer is what makes that distinction work end-to-end.
+
+
+----------------------------------------------------------------
+ENTRY 4 — Getting the current user inside the controller
+----------------------------------------------------------------
+
+Prompt:
+"In a Spring Security setup with JWT, how do I get the logged-in
+user's User entity inside a controller method? Sophie's filter sets
+authentication based on the JWT but I don't know what the principal
+actually is."
+
+Issues:
+The AI suggested two options: inject @AuthenticationPrincipal
+UserDetails, or call SecurityContextHolder.getContext()
+.getAuthentication(). It also suggested casting the principal
+directly to our com.moodtunes.model.User entity. That last one
+would NOT have worked — I checked Sophie's CustomUserDetailsService
+and the principal is Spring's built-in
+org.springframework.security.core.userdetails.User, not our entity.
+Casting would have thrown ClassCastException on the first real
+request.
+
+Fix:
+Pulled the username from auth.getName() in the controller, then
+passed it to PlaylistGenerationService, which calls
+userRepository.findByUsername(username) to load the actual User
+entity. One extra DB lookup per request but it's cheap and it works
+with the auth setup we already have.
+
+Explanation:
+Not understanding what the principal actually is is a classic
+Spring Security mistake. Reading the team's existing
+CustomUserDetailsService before writing my own code saved me from
+shipping a ClassCastException bug. Always trace what the upstream
+filter actually puts in the SecurityContext.
+
+
+----------------------------------------------------------------
+ENTRY 5 — Filename pattern for the JSON snapshot
+----------------------------------------------------------------
+
+Prompt:
+"How do I generate filenames like 'playlist-20251104-143022.json'
+in Java? I need timestamps that sort lexicographically and don't
+have characters that break on Windows."
+
+Issues:
+The AI's first version used SimpleDateFormat with a
+"yyyy-MM-dd HH:mm:ss" pattern. That has spaces and colons in the
+filename, which breaks on Windows file systems. Two of my teammates
+are on Windows, so files written during local dev would have failed.
+
+Fix:
+Switched to java.time.format.DateTimeFormatter with the pattern
+"yyyyMMdd-HHmmss" — no spaces, no colons, sorts correctly as a
+string, matches exactly the format specified in RESPONSIBILITIES.md.
+Also switched from SimpleDateFormat (not thread-safe) to
+DateTimeFormatter (thread-safe and immutable), which matters because
+this service can be called concurrently.
+
+Explanation:
+Cross-platform filename rules and thread safety are easy things to
+get wrong if you only test on one machine. DateTimeFormatter is the
+modern Java 8+ API and is safe to share as a static final field —
+SimpleDateFormat is not, and would have caused subtle bugs under
+concurrent load that are very hard to debug.
+
+
+----------------------------------------------------------------
+ENTRY 6 — Coordinating the shared controller file with Wenwei
+----------------------------------------------------------------
+
+Prompt:
+"My teammate and I both own different endpoints in the same Spring
+controller class (PlaylistController.java). I own POST /generate,
+he owns five other endpoints. How do we structure the file so we
+don't keep stepping on each other's changes in git?"
+
+Issues:
+The AI suggested splitting into two controller classes
+(PlaylistGenerateController and PlaylistController), which would
+have technically solved the merge conflict problem but contradicts
+RESPONSIBILITIES.md, which explicitly lists this as one co-owned
+file. Going around the spec without asking would have been a
+coordination problem, not a solution to one.
+
+Fix:
+Kept it as one class. Added a clear comment block at the top listing
+who owns which endpoints, and put my method inside a section
+delimited by ============ banner comments. Added a
+"WENWEI — add your endpoints below" marker at the bottom so his
+additions land in a predictable place.
+
+Explanation:
+Code-level conventions aren't a substitute for actually talking to
+your teammate, but they make the talking easier. When Wenwei opens
+the file he immediately sees where his code goes and where mine
+ends. Most merge conflicts on shared files come from people editing
+the same lines — clear section boundaries fix that for free.
+
+
+----------------------------------------------------------------
+ENTRY 7 — Putting Flask config in application.properties
+----------------------------------------------------------------
+
+Prompt:
+"How do I read 'flask.base-url' and timeout values from
+application.properties in Java? Should I use @Value or
+@ConfigurationProperties?"
+
+Issues:
+The AI gave a long explanation of @ConfigurationProperties with a
+full @ConstructorBinding setup, which is the more 'enterprise'
+choice. For three properties it was overkill, and it would have
+required adding spring-boot-configuration-processor to the pom —
+which means changing pom.xml, a file Sophie owns. Avoidable
+coordination cost for not much gain.
+
+Fix:
+Used @Value with default values inline:
+  @Value("${flask.base-url:http://localhost:5001}")
+  private String baseUrl;
+This way the project still boots cleanly even if Sophie hasn't
+added the keys to application.properties yet. I'll send her the
+three lines to add when my branch is ready to merge.
+
+Explanation:
+@Value with defaults is the lighter-weight choice when you only
+have a few config keys and don't need validation or nested
+structures. Defaults also mean my code doesn't break Sophie's local
+environment if she pulls before adding the properties — small thing,
+but team velocity matters in a 6-week project.
+
+
+================================================================
+End of log.
+================================================================
