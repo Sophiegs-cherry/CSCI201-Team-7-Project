@@ -32,3 +32,8 @@ cors.max-age=3600
 flask.base-url=http://localhost:5001
 flask.connect-timeout-ms=3000
 flask.read-timeout-ms=30000
+
+# JWT
+# Use a private 32+ character secret in your local application.properties.
+jwt.secret=CHANGE_ME_TO_A_32_PLUS_CHARACTER_SECRET
+jwt.expiration=86400000
