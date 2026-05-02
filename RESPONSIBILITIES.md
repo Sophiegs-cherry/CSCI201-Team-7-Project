@@ -30,49 +30,59 @@ CSCI201-Team-7-Project/
 │           ├── PlaylistDetailPage.js
 │           ├── FriendsPage.js
 │           ├── SharedWithMePage.js
-│           └── ShareModal.js
+│           ├── ShareModal.js
+│           └── test/
+│               └── *.test.js
 ├── backend/
 │   ├── pom.xml
 │   └── src/
-│       ├── main/java/com/moodtunes/
+│       ├── main/java/
 │       │   ├── MoodTunesApplication.java
-│       │   ├── config/
-│       │   │   ├── SecurityConfig.java
-│       │   │   ├── CorsConfig.java
-│       │   │   └── FlaskConfig.java
-│       │   ├── controller/
-│       │   │   ├── AuthController.java
-│       │   │   ├── MoodController.java
-│       │   │   ├── PlaylistController.java
-│       │   │   └── FriendController.java
-│       │   ├── service/
-│       │   │   ├── AuthService.java
-│       │   │   ├── PlaylistGenerationService.java
-│       │   │   ├── FlaskClientService.java
-│       │   │   ├── JsonFileSaveService.java
-│       │   │   └── FriendService.java
-│       │   ├── repository/
-│       │   │   ├── UserRepository.java
-│       │   │   ├── MoodRepository.java
-│       │   │   ├── PlaylistRepository.java
-│       │   │   ├── PlaylistTrackRepository.java
-│       │   │   ├── FriendshipRepository.java
-│       │   │   └── SharedPlaylistRepository.java
-│       │   └── model/
-│       │       ├── User.java
-│       │       ├── Mood.java
-│       │       ├── Playlist.java
-│       │       ├── PlaylistTrack.java
-│       │       ├── Friendship.java
-│       │       └── SharedPlaylist.java
+│       │   └── com/moodtunes/
+│       │       ├── config/
+│       │       │   ├── SecurityConfig.java
+│       │       │   ├── CorsConfig.java
+│       │       │   └── FlaskConfig.java
+│       │       ├── controller/
+│       │       │   ├── AuthController.java
+│       │       │   ├── MoodController.java
+│       │       │   ├── PlaylistController.java
+│       │       │   └── FriendController.java
+│       │       ├── dto/
+│       │       ├── security/
+│       │       ├── service/
+│       │       │   ├── AuthService.java
+│       │       │   ├── PlaylistGenerationService.java
+│       │       │   ├── FlaskClientService.java
+│       │       │   ├── JsonFileSaveService.java
+│       │       │   └── FriendService.java
+│       │       ├── repository/
+│       │       │   ├── UserRepository.java
+│       │       │   ├── MoodRepository.java
+│       │       │   ├── PlaylistRepository.java
+│       │       │   ├── PlaylistTrackRepository.java
+│       │       │   ├── FriendshipRepository.java
+│       │       │   └── SharedPlaylistRepository.java
+│       │       └── model/
+│       │           ├── User.java
+│       │           ├── Mood.java
+│       │           ├── Playlist.java
+│       │           ├── PlaylistTrack.java
+│       │           ├── Friendship.java
+│       │           └── SharedPlaylist.java
 │       ├── main/resources/application.properties.example
 │       ├── main/resources/application.properties  ← local only, not committed
 │       └── test/java/com/moodtunes/
+│           ├── controller/
+│           ├── security/
+│           └── service/
 ├── flask-service/
 │   ├── app.py
 │   ├── requirements.txt
-│   └── .env.example
-└── playlists/                    ← auto-created at runtime, not committed
+│   ├── .env.example
+│   └── tests/
+├── backend/playlists/             ← auto-created by Spring-side JSON service tests, not committed
+└── flask-service/playlists/       ← auto-created by Flask generation, not committed
 ```
 
 ---
@@ -117,6 +127,7 @@ CSCI201-Team-7-Project/
 | `frontend/src/pages/FriendsPage.js` | username search bar, My Friends / Received Requests / Sent Requests tabs |
 | `frontend/src/pages/SharedWithMePage.js` | playlists shared with the logged-in user, with sender info + message |
 | `frontend/src/pages/ShareModal.js` | modal: friend checkboxes, optional message, Cancel / Send |
+| `frontend/src/pages/test/` | Jest/React Testing Library tests for page and modal behavior |
 
 ---
 
@@ -126,7 +137,7 @@ CSCI201-Team-7-Project/
 | File | Purpose |
 |---|---|
 | `backend/pom.xml` | Maven deps + build config |
-| `backend/src/main/java/com/moodtunes/MoodTunesApplication.java` | Spring Boot entry point |
+| `backend/src/main/java/MoodTunesApplication.java` | Spring Boot entry point (`package com.moodtunes`) |
 | `backend/src/main/java/com/moodtunes/config/SecurityConfig.java` | filter chain: permits `/api/auth/**`, blocks all else |
 | `backend/src/main/java/com/moodtunes/config/CorsConfig.java` | allows `localhost:3000` |
 | `backend/src/main/java/com/moodtunes/controller/AuthController.java` | `POST /api/auth/register`, `POST /api/auth/login` |
@@ -161,8 +172,8 @@ Owns the entire `flask-service/` directory.
 
 | File | Purpose |
 |---|---|
-| `flask-service/app.py` | `POST /generate-playlist`: receives `{mood, musicPreferences, context}`, builds Gemini prompt, calls Gemini API, parses response, validates each track via ytmusicapi, returns `[{trackName, artistName, youtubeMusicUrl}]` |
-| `flask-service/requirements.txt` | `flask`, `google-generativeai`, `ytmusicapi` |
+| `flask-service/app.py` | `POST /generate-playlist`: receives `{mood, musicPreferences, context}`, builds Gemini prompt, calls Gemini API, parses response, validates each track via ytmusicapi, saves a local JSON copy, returns `[{trackName, artistName, youtubeMusicUrl}]` |
+| `flask-service/requirements.txt` | `flask`, `google-genai`, `ytmusicapi`, `python-dotenv` |
 | `flask-service/.env.example` | template — copy to `.env`, set `GEMINI_API_KEY` |
 
 Flask runs at `localhost:5001`. Never expose it publicly. Key must stay in `.env` only.
@@ -176,10 +187,10 @@ Flask runs at `localhost:5001`. Never expose it publicly. Key must stay in `.env
 |---|---|
 | `backend/src/main/java/com/moodtunes/config/FlaskConfig.java` | Flask base URL (`localhost:5001`) + timeout settings |
 | `backend/src/main/java/com/moodtunes/controller/PlaylistController.java` | `POST /api/playlists/generate` endpoint only (**coordinate with Wenwei on the shared file**) |
-| `backend/src/main/java/com/moodtunes/service/PlaylistGenerationService.java` | orchestrates: calls FlaskClientService → calls JsonFileSaveService → persists to DB via Wenwei's repos |
+| `backend/src/main/java/com/moodtunes/service/PlaylistGenerationService.java` | orchestrates preview generation: calls FlaskClientService, validates non-empty tracks, returns GenerationResult |
 | `backend/src/main/java/com/moodtunes/service/FlaskClientService.java` | `RestTemplate` POST to Flask, parses track list, handles connection failures + timeouts with 503 fallback |
-| `backend/src/main/java/com/moodtunes/service/JsonFileSaveService.java` | writes `playlists/playlist-{yyyyMMdd-HHmmss}.json` after every generation |
-| `playlists/` | auto-created at runtime; gitignored; not served to users |
+| `backend/src/main/java/com/moodtunes/service/JsonFileSaveService.java` | writes `playlists/playlist-{yyyyMMdd-HHmmss}.json`; tested utility/debug artifact, not served to users |
+| `backend/playlists/` | auto-created when JsonFileSaveService is run/tested from `backend/`; gitignored; not served to users |
 
 ---
 
@@ -190,8 +201,8 @@ Flask runs at `localhost:5001`. Never expose it publicly. Key must stay in `.env
 |---|---|
 | `backend/src/main/java/com/moodtunes/controller/FriendController.java` | all `/api/friends/**` endpoints |
 | `backend/src/main/java/com/moodtunes/service/FriendService.java` | request, accept, decline, list, remove, search; blocks self-friend and duplicate requests |
-| `backend/src/main/java/com/moodtunes/repository/FriendshipRepository.java` | `findByAddresseeIdAndStatus()`, `findByRequesterIdOrAddresseeId()` |
-| `backend/src/main/java/com/moodtunes/repository/SharedPlaylistRepository.java` | `findByRecipientIdOrderBySharedAtDesc()` |
+| `backend/src/main/java/com/moodtunes/repository/FriendshipRepository.java` | `findByRequesterUserIdAndAddresseeUserId()`, `findByAddresseeUserIdAndStatus()`, `findByRequesterUserIdAndStatus()`, `findFriendshipsForUserByStatus()`, `findBetween()` |
+| `backend/src/main/java/com/moodtunes/repository/SharedPlaylistRepository.java` | `findByRecipientUserIdOrderBySharedAtDesc()`, `existsByPlaylistPlaylistIdAndRecipientUserId()`, `findByPlaylistPlaylistIdAndRecipientUserId()` |
 | `backend/src/main/java/com/moodtunes/model/Friendship.java` | `@Entity friendships`: requester, addressee, status (PENDING/ACCEPTED/DECLINED), unique(requester, addressee) |
 | `backend/src/main/java/com/moodtunes/model/SharedPlaylist.java` | `@Entity shared_playlists`: playlist, sender, recipient, optional message, sharedAt |
-| `backend/src/test/java/com/moodtunes/` | all test files — coordinates with each owner for unit tests; leads integration tests 7.1–7.3 |
+| `backend/src/test/java/com/moodtunes/` | backend controller, service, and security tests — coordinates with each owner for unit tests; leads integration coverage |

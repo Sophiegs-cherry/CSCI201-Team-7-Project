@@ -83,7 +83,10 @@ Intended to be called after `POST /api/playlists/generate` (Sid's endpoint) retu
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `title` | string | yes | Playlist title |
-| `moodId` | int | yes | ID of the mood that triggered this playlist |
+| `moodId` | int | no | ID of an existing mood that triggered this playlist |
+| `mood` | string | no | Mood text used to create a new mood when `moodId` is omitted |
+| `musicPreferences` | string | no | Optional preferences for a new mood when `moodId` is omitted |
+| `context` | string | no | Optional context for a new mood when `moodId` is omitted |
 | `tracks` | array | no | List of track objects (see below) |
 
 Each track object:
@@ -152,7 +155,7 @@ Each track object:
 
 | Status | Body | Cause |
 |---|---|---|
-| `400` | `{"error": "moodId is required"}` | `moodId` field missing from request |
+| `400` | `{"error": "mood is required"}` | both `moodId` and `mood` are missing/blank |
 | `400` | `{"error": "title is required"}` | `title` is null or blank |
 
 ---
@@ -189,7 +192,7 @@ Return all saved playlists for the authenticated user as a summary list, newest 
 ### GET `/api/playlists/{id}`
 
 Return full details of a single playlist including all tracks.  
-Only the playlist owner can access this endpoint.
+The playlist owner can access it. A recipient can also access it if the playlist was shared with them.
 
 **Path Parameter**
 
@@ -226,7 +229,8 @@ Only the playlist owner can access this endpoint.
 
 | Status | Body | Cause |
 |---|---|---|
-| `403` | `{"error": "Playlist not found or access denied"}` | Playlist doesn't exist or belongs to another user |
+| `404` | `{"error": "Playlist not found"}` | Playlist ID does not exist |
+| `403` | `{"error": "Playlist not found or access denied"}` | Playlist belongs to another user and was not shared with the caller |
 
 ---
 
@@ -264,6 +268,7 @@ Share one of the authenticated user's playlists with one or more friends.
 |---|---|---|
 | `400` | `{"error": "playlistId is required"}` | `playlistId` missing |
 | `400` | `{"error": "recipientIds is required"}` | `recipientIds` is null or empty |
+| `400` | `{"error": "Can only share with friends"}` | recipient is not an accepted friend |
 | `403` | `{"error": "You do not own this playlist"}` | Caller does not own the playlist |
 
 > **Note:** Invalid recipient IDs (user not found) are silently skipped — no error is returned for them.
@@ -297,7 +302,7 @@ Return all playlists that other users have shared with the authenticated user, n
 ]
 ```
 
-> **Note:** To view the full track list of a shared playlist, call `GET /api/playlists/{playlistId}` — access control will need to be relaxed for shared playlists (coordinate with Suzy/Sid if this is needed).
+> **Note:** To view the full track list of a shared playlist, call `GET /api/playlists/{playlistId}`. Shared-recipient access is supported.
 
 ---
 
@@ -309,7 +314,7 @@ All requests must include:
 Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
 ```
 
-The JWT is returned by `POST /api/auth/login` (Sophie's endpoint). A missing or expired token returns `401 Unauthorized`.
+The JWT is returned by `POST /api/auth/login` (Sophie's endpoint). Protected routes reject missing or expired tokens before controller logic runs.
 
 ---
 
