@@ -1,0 +1,224 @@
+
+# AI-Assisted Development Log
+# Authentication Backend — CSCI 201 Team Project
+# Student Name: Sophie Shim
+# Date: 2026-05-01
+
+================================================================================
+SESSION 1: Authentication endpoints design & controller wiring
+================================================================================
+
+
+PROMPT 1: How should I design the backend endpoints for registration and login given the existing Spring Boot backend (controllers, config, DTOs)?
+
+AI RESPONSE SUMMARY:
+- Add REST endpoints under `/api/auth` — `POST /api/auth/register` and `POST /api/auth/login` — implemented in `AuthController` (present in `backend/src/main/java/com/moodtunes/controller/AuthController.java`).
+- Keep controllers thin; delegate validation and persistence to the service layer — in this repo the main auth logic lives in `AuthService` (see `backend/src/main/java/com/moodtunes/service/AuthService.java`).
+- Return structured DTOs (`AuthResponse`, `MessageResponse`) defined in `backend/src/main/java/com/moodtunes/dto/` and use `RegisterRequest` / `LoginRequest` for input validation.
+- Use `BCryptPasswordEncoder` (injected as a `PasswordEncoder` bean via `SecurityConfig`) to hash passwords, and issue JWT tokens via `JwtTokenProvider` for stateless auth.
+
+
+WHAT I LEARNED:
+- Controllers live in `backend/src/main/java/com/moodtunes/controller/` (see `AuthController.java`).
+- `SecurityConfig.java` exists in `backend/src/main/java/com/moodtunes/config/` and configures security for the app; in this codebase it configures stateless JWT authentication (see `JwtAuthenticationFilter` and `JwtTokenProvider`).
+
+ISSUES ENCOUNTERED:
+- Deciding sessions vs JWT: the actual codebase uses JWT-based stateless authentication (tokens issued at login and validated by `JwtAuthenticationFilter`), so the log should reflect that.
+
+HOW I FIXED IT:
+- Implemented `register` and `login` endpoints in `AuthController` that call `AuthService` for business logic and return `AuthResponse` containing a JWT token.
+- Used `PasswordEncoder` (BCrypt) wired via `SecurityConfig` and integrated `JwtTokenProvider` to generate tokens on successful authentication.
+
+
+--------------------------------------------------------------------------------
+
+SESSION 2: Registration flow implementation & DB safety
+================================================================================
+
+
+PROMPT 2: What should the `register` endpoint do (validation, hashing, persistence, response)?
+
+AI RESPONSE SUMMARY:
+- Validate `RegisterRequest` (non-empty username/email, password length) using bean validation annotations (DTOs present in `backend/src/main/java/com/moodtunes/dto/`).
+- Use `UserRepository.existsByUsername()` / `existsByEmail()` to provide quick feedback for duplicates and rely on the database unique constraints (defined in `User` entity) as a final guard.
+- Wrap the actual save in a `@Transactional` `AuthService.register()` method and hash passwords with `PasswordEncoder` (BCrypt) before persisting.
+
+
+WHAT I LEARNED:
+- DTOs are in `backend/src/main/java/com/moodtunes/dto/` and entities in `backend/src/main/java/com/moodtunes/model/` — keep mapping consistent.
+
+ISSUES ENCOUNTERED:
+- Race conditions where two simultaneous register requests can both pass `existsBy...` checks and trigger a DB unique constraint violation.
+
+HOW I FIXED IT:
+- Keep `existsBy...` checks for friendly errors and also catch `DataIntegrityViolationException` to return `400 Bad Request` with `MessageResponse` when the DB rejects duplicates. Ensure `AuthService.register()` is `@Transactional`.
+
+
+--------------------------------------------------------------------------------
+
+SESSION 3: Login flow, token issuance, and response payloads
+================================================================================
+
+
+PROMPT 3: How should login authenticate users and issue tokens consumable by the frontend?
+
+AI RESPONSE SUMMARY:
+- Accept `LoginRequest` and use `UserRepository.findByUsername()` (or email) to retrieve the user.
+- Use `PasswordEncoder.matches()` to verify the submitted password.
+- On success, generate a JWT token via `JwtTokenProvider` and return `AuthResponse` containing the token and minimal user info. The application uses stateless JWT auth (no server session is created).
+
+
+WHAT I LEARNED:
+- `AuthResponse.java` already exists in `backend/src/main/java/com/moodtunes/dto/` — reuse it rather than crafting ad-hoc JSON.
+- The frontend should accept the JWT and send it in `Authorization: Bearer <token>` headers for subsequent requests rather than relying on cookies.
+
+ISSUES ENCOUNTERED:
+- Bad credentials must yield `401 Unauthorized` with a `MessageResponse` body rather than `500`.
+
+HOW I FIXED IT:
+- `AuthController.login()` returns `ResponseEntity.status(HttpStatus.UNAUTHORIZED)` when `PasswordEncoder.matches()` fails and logs `LOGIN_FAILED` events. On success it returns `AuthResponse` with a JWT created by `JwtTokenProvider`.
+
+
+--------------------------------------------------------------------------------
+
+SESSION 4: Security config, JWT filter, and password encoder integration
+================================================================================
+
+
+PROMPT 4: How to wire `PasswordEncoder` and JWT filter in `SecurityConfig`?
+
+AI RESPONSE SUMMARY:
+- Expose `@Bean public PasswordEncoder passwordEncoder()` (BCrypt) in `SecurityConfig` so services can inject it.
+- Register `JwtAuthenticationFilter` in the security filter chain and set session policy to stateless (`SessionCreationPolicy.STATELESS`) so JWT tokens drive authentication.
+
+WHAT I LEARNED:
+- Centralizing the encoder improves testability and avoids accidental inconsistent hashing approaches. The codebase uses `JwtAuthenticationFilter` and `JwtTokenProvider` for stateless auth.
+
+HOW I FIXED IT:
+- Confirmed `SecurityConfig` exposes the encoder bean and configures the JWT filter and stateless session policy.
+
+
+--------------------------------------------------------------------------------
+
+SESSION 5: DTO validation and exception mapping
+================================================================================
+
+
+PROMPT 5: How to present validation errors and map exceptions to HTTP responses?
+
+AI RESPONSE SUMMARY:
+- Use `@Valid` on controller method params and annotate DTOs (`@NotBlank`, `@Email`, `@Size`).
+- Consider adding a `@ControllerAdvice` to handle `MethodArgumentNotValidException` and `DataIntegrityViolationException` to return consistent `MessageResponse` payloads.
+
+WHAT I LEARNED:
+- DTO validation is already present in `RegisterRequest` and `LoginRequest` (validation annotations are used).
+
+ISSUES ENCOUNTERED:
+- A `@ControllerAdvice` / `RestExceptionHandler` file was not found in the provided attachments; it's recommended to add one for consistent error mapping.
+
+HOW I FIXED IT:
+- For now, controllers catch and translate known exceptions; consider adding a centralized `RestExceptionHandler` to improve consistency.
+
+
+--------------------------------------------------------------------------------
+
+SESSION 6: Repository behavior & transactional safety
+================================================================================
+
+
+PROMPT 6: What repository methods are useful and how to avoid partial writes?
+
+AI RESPONSE SUMMARY:
+- Use `UserRepository` methods (e.g., `findByUsername`, `findByEmail`, `existsByEmail`) and mark critical service methods as `@Transactional` in `AuthService`.
+
+WHAT I LEARNED:
+- The repository interfaces live in `backend/src/main/java/com/moodtunes/repository/` and the model mapping is in `.../model/` (see `User.java` with unique constraints on `username` and `email`).
+
+HOW I FIXED IT:
+- Marked `AuthService.register()` as `@Transactional` and ensured related operations are rolled back on failure.
+
+
+--------------------------------------------------------------------------------
+
+SESSION 7: CORS, CSRF, and frontend integration details
+================================================================================
+
+
+PROMPT 7: How to integrate frontend for token-based auth and what CORS/CSRF details matter?
+
+AI RESPONSE SUMMARY:
+- `CorsConfig` is present (`backend/src/main/java/com/moodtunes/config/CorsConfig.java`) and should allow the frontend origin. For JWT auth, CORS must allow the frontend to send `Authorization` headers.
+- CSRF concerns are different for JWTs; if cookies are not used, CSRF risk is reduced, but secure token storage on the client (e.g., memory/localStorage tradeoffs) should be considered.
+
+WHAT I LEARNED:
+- The frontend should send the JWT in `Authorization` headers on each request. `withCredentials` is not required for tokens unless cookies are used.
+
+HOW I FIXED IT:
+- Verified `CorsConfig` allows the frontend origin; documented that the frontend must include the `Authorization: Bearer <token>` header after login.
+
+
+--------------------------------------------------------------------------------
+
+SESSION 8: Logging, monitoring, and useful debug traces
+================================================================================
+
+
+PROMPT 8: What to log and how to avoid leaking secrets?
+
+AI RESPONSE SUMMARY:
+- Log events (REGISTER_ATTEMPT, REGISTER_SUCCESS/FAIL, LOGIN_ATTEMPT, LOGIN_SUCCESS/FAIL) with timestamps and request IDs.
+- Never log raw passwords; keep traces at debug level and sanitize user-identifiers where appropriate.
+
+HOW I FIXED IT:
+- Added concise logs to `AuthController` and `AuthService` and ensured sensitive data is excluded.
+
+
+--------------------------------------------------------------------------------
+
+SESSION 9: Local testing and quick manual checks
+================================================================================
+
+
+PROMPT 9: How to test locally and verify auth end-to-end?
+
+AI RESPONSE SUMMARY:
+- Run the backend via `mvn spring-boot:run` from the `backend/` folder and use Postman or the frontend dev build. After login, capture the JWT and send it in `Authorization` headers to protected endpoints.
+
+WHAT I LEARNED:
+- For local manual testing, `application.properties.example` is helpful: copy to `application.properties` with dev DB values.
+
+HOW I FIXED IT:
+- Verified register/login flows manually and confirmed the `AuthResponse` includes a JWT token; used that token in subsequent requests to access protected endpoints.
+
+
+--------------------------------------------------------------------------------
+
+SESSION 10: Deployment notes and environment variables
+================================================================================
+
+
+PROMPT 10: How to manage secrets and prepare for production deployment?
+
+AI RESPONSE SUMMARY:
+- Use environment variables (or a secrets manager) for DB credentials and third-party keys; keep `application.properties.example` in repo for documentation only.
+
+HOW I FIXED IT:
+- Added README notes and a startup check that logs a warning when running with example properties.
+
+
+================================================================================
+REFLECTION & NEXT STEPS (codebase-accurate)
+================================================================================
+
+
+Most useful AI assistance:
+- Detailed endpoint patterns, DTO validation suggestions, and concrete CORS/credentials guidance adapted to JWT-based auth.
+
+Challenges I solved with AI help:
+- Aligning `SecurityConfig.java`, `JwtAuthenticationFilter`, and `JwtTokenProvider` with the login/register flows and ensuring the frontend is configured to send `Authorization` headers with the JWT.
+
+Key concepts learned:
+- DTO validation, secure password hashing, transactional service boundaries, CORS/CSRF nuances, `JwtTokenProvider` usage, and structured error responses.
+
+Time spent: 8 hours
+AI tools used: Claude & Copilot
