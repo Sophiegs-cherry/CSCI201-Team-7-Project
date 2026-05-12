@@ -1,0 +1,615 @@
+# AI-Assisted Development Log
+# MoodTunes - CSCI 201 Final Project (Team 7)
+# Student Name: Trevor Woo
+# Role: Frontend - Auth Flow & App Shell
+# Branch: trevor/frontend-auth
+# AI tools used: ChatGPT, Claude, Copilot
+
+================================================================================
+
+1) First Prompt:
+
+    under CSCI201-Team-7-Project/frontend/ on the trevor/frontend-auth branch:
+
+    You are an expert React frontend developer. Help me set up the frontend
+    architecture for the MoodTunes project. I own the authentication flow and
+    app shell. Build the React project structure for login, registration,
+    landing page, navbar, routing, protected routes, and global auth state.
+    The frontend must connect cleanly with the Spring Boot backend running on
+    localhost:8080.
+
+AI Response:
+
+    - Recommended creating the React frontend using create-react-app
+    - Installed frontend dependencies:
+        - react-router-dom
+        - axios
+    - Created frontend folder structure:
+        frontend/src/api
+        frontend/src/context
+        frontend/src/components
+        frontend/src/pages
+    - Suggested React Router for page navigation and protected routes
+    - Recommended using Context API for JWT authentication state
+
+Code Snippet:
+
+    npx create-react-app frontend
+    cd frontend
+    npm install axios react-router-dom
+
+
+================================================================================
+
+2) Second Prompt:
+
+    under CSCI201-Team-7-Project/frontend/src/api/ on the trevor/frontend-auth branch:
+
+    You are an expert React frontend developer. Create a reusable Axios API
+    client for the MoodTunes frontend. The Spring Boot backend runs on
+    localhost:8080, and after login, every protected request should send the
+    JWT token in the Authorization header.
+
+AI Response:
+
+    - Created src/api/axios.js
+    - Configured Axios baseURL to http://localhost:8080
+    - Added request interceptor to check localStorage and sessionStorage
+    - Attached JWT using Authorization: Bearer <token>
+    - Exported the API client so all frontend pages can reuse it
+
+Code Snippet:
+
+    import axios from "axios";
+
+    const api = axios.create({
+      baseURL: "http://localhost:8080",
+    });
+
+    api.interceptors.request.use((config) => {
+      const token =
+        localStorage.getItem("token") || sessionStorage.getItem("token");
+
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+
+      return config;
+    });
+
+    export default api;
+
+
+================================================================================
+
+3) Third Prompt:
+
+    under CSCI201-Team-7-Project/frontend/src/context/ on the
+    trevor/frontend-auth branch:
+
+    You are an expert React frontend developer. Build a global authentication
+    context for MoodTunes. It should store the JWT token, restore login state
+    when the page refreshes, support Remember Me, and provide login, register,
+    logout, and isAuthenticated values to the rest of the app.
+
+AI Response:
+
+    - Created src/context/AuthContext.js
+    - Used React Context API for global authentication state
+    - Added token state using useState()
+    - Restored token from localStorage or sessionStorage using useEffect()
+    - Added login() to call /api/auth/login
+    - Added register() to call /api/auth/register
+    - Added logout() to clear stored tokens
+    - Exposed isAuthenticated for route protection
+
+Code Snippet:
+
+    import { createContext, useContext, useState, useEffect } from "react";
+    import api from "../api/axios";
+
+    const AuthContext = createContext();
+
+    export const AuthProvider = ({ children }) => {
+      const [token, setToken] = useState(null);
+
+      useEffect(() => {
+        const stored =
+          localStorage.getItem("token") || sessionStorage.getItem("token");
+        if (stored) setToken(stored);
+      }, []);
+
+      const login = async (data, remember) => {
+        const res = await api.post("/api/auth/login", data);
+        const jwt = res.data.token;
+
+        if (remember) {
+          localStorage.setItem("token", jwt);
+        } else {
+          sessionStorage.setItem("token", jwt);
+        }
+
+        setToken(jwt);
+      };
+
+      const register = async (data) => {
+        await api.post("/api/auth/register", data);
+      };
+
+      const logout = () => {
+        localStorage.removeItem("token");
+        sessionStorage.removeItem("token");
+        setToken(null);
+      };
+
+      return (
+        <AuthContext.Provider
+          value={{
+            token,
+            isAuthenticated: !!token,
+            login,
+            register,
+            logout,
+          }}
+        >
+          {children}
+        </AuthContext.Provider>
+      );
+    };
+
+    export const useAuth = () => useContext(AuthContext);
+
+
+================================================================================
+
+4) Fourth Prompt:
+
+    under CSCI201-Team-7-Project/frontend/src/ on the trevor/frontend-auth branch:
+
+    You are an expert React frontend developer. Build the main App.js routing
+    file for MoodTunes. The app needs routes for the landing page, login page,
+    register page, and a protected dashboard placeholder. Guests should be
+    redirected to login if they try to access protected routes.
+
+AI Response:
+
+    - Created route structure using React Router
+    - Added / for LandingPage
+    - Added /login for LoginPage
+    - Added /register for RegisterPage
+    - Added /dashboard as a protected route
+    - Built ProtectedRoute using isAuthenticated from AuthContext
+    - Redirected unauthenticated users to /login using Navigate
+    - Included Navbar so the app shell is shared across pages
+
+Code Snippet:
+
+    import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+    import { useAuth } from "./context/AuthContext";
+    import Navbar from "./components/Navbar";
+
+    import LandingPage from "./pages/LandingPage";
+    import LoginPage from "./pages/LoginPage";
+    import RegisterPage from "./pages/RegisterPage";
+
+    const Dashboard = () => (
+      <div style={{ color: "white", padding: "2rem" }}>
+        <h2>Dashboard (Protected)</h2>
+      </div>
+    );
+
+    const ProtectedRoute = ({ children }) => {
+      const { isAuthenticated } = useAuth();
+      return isAuthenticated ? children : <Navigate to="/login" />;
+    };
+
+    function App() {
+      return (
+        <div style={{ backgroundColor: "#0d0d0d", minHeight: "100vh" }}>
+          <Router>
+            <Navbar />
+
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <Dashboard />
+                  </ProtectedRoute>
+                }
+              />
+            </Routes>
+          </Router>
+        </div>
+      );
+    }
+
+    export default App;
+
+
+================================================================================
+
+5) Fifth Prompt:
+
+    under CSCI201-Team-7-Project/frontend/src/components/ on the
+    trevor/frontend-auth branch:
+
+    You are an expert React frontend developer. Build a shared Navbar component
+    for MoodTunes. It should change based on whether the user is logged in.
+    Guests should see Login and Sign Up, authenticated users should see
+    Dashboard and Logout, and the navbar should be hidden on the guest landing
+    page.
+
+AI Response:
+
+    - Created src/components/Navbar.js
+    - Used useAuth() to access isAuthenticated and logout()
+    - Used useLocation() to check the current route
+    - Hid navbar on / when the user is not logged in
+    - Added Dashboard link for authenticated users
+    - Added Logout button that clears auth state
+    - Added Login and Sign Up links for guests
+    - Styled the navbar with dark theme colors
+
+Code Snippet:
+
+    import { Link, useLocation } from "react-router-dom";
+    import { useAuth } from "../context/AuthContext";
+
+    function Navbar() {
+      const { isAuthenticated, logout } = useAuth();
+      const location = useLocation();
+
+      if (location.pathname === "/" && !isAuthenticated) return null;
+
+      const navStyle = {
+        display: "flex",
+        justifyContent: "space-between",
+        padding: "1rem 2rem",
+        backgroundColor: "#111",
+        borderBottom: "1px solid #222",
+      };
+
+      const linkStyle = {
+        color: "#ccc",
+        marginRight: "1rem",
+        textDecoration: "none",
+      };
+
+      return (
+        <nav style={navStyle}>
+          <div style={{ color: "white" }}>MoodTunes</div>
+
+          <div>
+            {isAuthenticated ? (
+              <>
+                <Link style={linkStyle} to="/dashboard">Dashboard</Link>
+                <button
+                  onClick={logout}
+                  style={{ background: "#222", color: "white", border: "none", padding: "0.5rem 1rem" }}
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <Link style={linkStyle} to="/login">Login</Link>
+                <Link style={linkStyle} to="/register">Sign Up</Link>
+              </>
+            )}
+          </div>
+        </nav>
+      );
+    }
+
+    export default Navbar;
+
+
+================================================================================
+
+6) Sixth Prompt:
+
+    under CSCI201-Team-7-Project/frontend/src/pages/ on the
+    trevor/frontend-auth branch:
+
+    You are an expert React frontend developer. Build the MoodTunes guest
+    landing page in a simple dark theme. It should include the app name,
+    tagline, Sign Up and Log In buttons, a How It Works section, example moods
+    in bubble-style boxes, and a sample playlist preview box.
+
+AI Response:
+
+    - Created src/pages/LandingPage.js
+    - Added MoodTunes title and “Your Mood. Your Music.” tagline
+    - Added Sign Up and Log In CTA buttons
+    - Added How It Works section with three steps
+    - Added example mood bubbles
+    - Added sample playlist preview card
+    - Used black background, white text, grey secondary text, and simple cards
+
+Code Snippet:
+
+    import { Link } from "react-router-dom";
+
+    function LandingPage() {
+      const moods = ["Happy", "Calm", "Sad", "Energetic", "Anxious", "Focused"];
+
+      const sampleSongs = [
+        "Golden Hour — JVKE",
+        "Sunflower — Post Malone, Swae Lee",
+        "Good Days — SZA",
+        "Electric Feel — MGMT",
+      ];
+
+      return (
+        <div
+          style={{
+            minHeight: "100vh",
+            backgroundColor: "#0d0d0d",
+            color: "white",
+            padding: "60px 20px",
+            textAlign: "center",
+          }}
+        >
+          <h1 style={{ fontSize: "3rem", marginBottom: "10px" }}>MoodTunes</h1>
+          <p style={{ color: "#aaa", fontSize: "1.2rem" }}>
+            Your Mood. Your Music.
+          </p>
+
+          <div style={{ marginTop: "35px" }}>
+            <Link to="/register">
+              <button style={buttonStyle}>Sign Up</button>
+            </Link>
+            <Link to="/login">
+              <button style={outlineButtonStyle}>Log In</button>
+            </Link>
+          </div>
+
+          <section style={sectionStyle}>
+            <h2>How It Works</h2>
+            <div style={stepsContainer}>
+              <div style={stepCard}>1. Share your mood</div>
+              <div style={stepCard}>2. AI generates songs</div>
+              <div style={stepCard}>3. Listen on YouTube Music</div>
+            </div>
+          </section>
+
+          <section style={sectionStyle}>
+            <h2>Example Moods</h2>
+            <p style={{ color: "#aaa" }}>
+              Guests can preview the kinds of moods MoodTunes supports.
+            </p>
+
+            <div style={moodContainer}>
+              {moods.map((mood) => (
+                <span key={mood} style={moodBubble}>
+                  {mood}
+                </span>
+              ))}
+            </div>
+          </section>
+
+          <section style={sectionStyle}>
+            <h2>Sample Playlist Preview</h2>
+
+            <div style={playlistBox}>
+              <h3 style={{ marginBottom: "5px" }}>Calm Evening Mix</h3>
+              <p style={{ color: "#888", marginTop: 0 }}>
+                A preview of what MoodTunes can generate after sign up.
+              </p>
+
+              <ul style={songList}>
+                {sampleSongs.map((song) => (
+                  <li key={song} style={songItem}>
+                    {song}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </section>
+        </div>
+      );
+    }
+
+    export default LandingPage;
+
+
+================================================================================
+
+7) Seventh Prompt:
+
+    under CSCI201-Team-7-Project/frontend/src/pages/ on the
+    trevor/frontend-auth branch:
+
+    You are an expert React frontend developer. Build the LoginPage for
+    MoodTunes. It should include username/email, password, Remember Me, and a
+    submit button. When login succeeds, it should store the token through
+    AuthContext and redirect to the protected dashboard route.
+
+AI Response:
+
+    - Created src/pages/LoginPage.js
+    - Used useState() for form data
+    - Added usernameOrEmail and password fields
+    - Added Remember Me checkbox
+    - Called login(form, remember) from AuthContext
+    - Redirected to /dashboard with useNavigate()
+    - Used simple dark theme form styling
+
+Code Snippet:
+
+    import { useState } from "react";
+    import { useAuth } from "../context/AuthContext";
+    import { useNavigate } from "react-router-dom";
+
+    function LoginPage() {
+      const { login } = useAuth();
+      const navigate = useNavigate();
+
+      const [form, setForm] = useState({
+        usernameOrEmail: "",
+        password: "",
+      });
+
+      const [remember, setRemember] = useState(false);
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        await login(form, remember);
+        navigate("/dashboard");
+      };
+
+      return (
+        <form onSubmit={handleSubmit} style={{ textAlign: "center", marginTop: "100px", color: "white" }}>
+          <h2>Login</h2>
+
+          <input style={inputStyle} placeholder="Username or Email"
+            onChange={(e) => setForm({ ...form, usernameOrEmail: e.target.value })} />
+
+          <input style={inputStyle} type="password" placeholder="Password"
+            onChange={(e) => setForm({ ...form, password: e.target.value })} />
+
+          <label style={{ color: "#aaa" }}>
+            <input type="checkbox" onChange={() => setRemember(!remember)} />
+            Remember Me
+          </label>
+
+          <br />
+
+          <button style={{ marginTop: "10px", padding: "10px 20px", background: "#222", color: "white", border: "none" }}>
+            Login
+          </button>
+        </form>
+      );
+    }
+
+    export default LoginPage;
+
+
+================================================================================
+
+8) Eighth Prompt:
+
+    under CSCI201-Team-7-Project/frontend/src/pages/ on the
+    trevor/frontend-auth branch:
+
+    You are an expert React frontend developer. Build the RegisterPage for
+    MoodTunes. It should include username, email, password, confirm password,
+    and optional display name. Add client-side validation so the passwords must
+    match before calling the backend.
+
+AI Response:
+
+    - Created src/pages/RegisterPage.js
+    - Used useState() for registration form state
+    - Added username, email, password, confirmPassword, and displayName fields
+    - Added password match validation before submission
+    - Called register(form) from AuthContext
+    - Redirected to /login after successful registration
+    - Used simple dark theme form styling
+
+Code Snippet:
+
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+
+      if (form.password !== form.confirmPassword) {
+        alert("Passwords do not match");
+        return;
+      }
+
+      await register(form);
+      navigate("/login");
+    };
+
+    return (
+      <form onSubmit={handleSubmit} style={{ textAlign: "center", marginTop: "100px", color: "white" }}>
+        <h2>Register</h2>
+
+        <input style={inputStyle} placeholder="Username"
+          onChange={(e) => setForm({ ...form, username: e.target.value })} />
+
+        <input style={inputStyle} placeholder="Email"
+          onChange={(e) => setForm({ ...form, email: e.target.value })} />
+
+        <input style={inputStyle} type="password" placeholder="Password"
+          onChange={(e) => setForm({ ...form, password: e.target.value })} />
+
+        <input style={inputStyle} type="password" placeholder="Confirm Password"
+          onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })} />
+
+        <input style={inputStyle} placeholder="Display Name (optional)"
+          onChange={(e) => setForm({ ...form, displayName: e.target.value })} />
+
+        <button style={{ marginTop: "10px", padding: "10px 20px", background: "#222", color: "white", border: "none" }}>
+          Register
+        </button>
+      </form>
+    );
+
+
+================================================================================
+
+9) Ninth Prompt:
+
+    under CSCI201-Team-7-Project/frontend/src/ on the trevor/frontend-auth branch:
+
+    You are an expert React frontend developer. Explain how index.js should
+    connect the React application to the browser and wrap the app in the
+    AuthProvider so all pages can access authentication state.
+
+AI Response:
+
+    - Updated src/index.js
+    - Used ReactDOM.createRoot() to render the app into public/index.html
+    - Wrapped App with AuthProvider
+    - Ensured every route and component can access AuthContext through useAuth()
+
+Code Snippet:
+
+    import React from "react";
+    import ReactDOM from "react-dom/client";
+    import App from "./App";
+    import { AuthProvider } from "./context/AuthContext";
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    );
+
+
+================================================================================
+
+10) Tenth Prompt:
+
+    under CSCI201-Team-7-Project/ on the trevor/frontend-auth branch:
+
+    You are an expert Git and React development assistant. Help me commit and
+    push my frontend auth work safely to GitHub without affecting my teammates'
+    branches. Explain how to push a new local branch and what to do if Git says
+    the branch has no upstream.
+
+AI Response:
+
+    - Confirmed work was on trevor/frontend-auth branch
+    - Explained that commits only affect the current branch
+    - Recommended running git status before committing
+    - Committed frontend auth flow changes
+    - Explained that the first push requires setting upstream
+    - Provided command to push the local branch to GitHub
+
+Code Snippet:
+
+    git status
+
+    git add .
+
+    git commit -m "Frontend auth flow with dark theme"
+
+    git push --set-upstream origin trevor/frontend-auth
